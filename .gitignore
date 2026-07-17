@@ -1,0 +1,13 @@
+# macOS
+.DS_Store
+
+# Arduino build output
+build/
+
+# Temporary files
+*.tmp
+*.bak
+*~
+
+# Visual Studio Code
+.vscode/
