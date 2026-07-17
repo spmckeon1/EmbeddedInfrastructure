@@ -1,0 +1,246 @@
+<!-- firmwareUpdate.html version 1.3 by Stephen McKeon (Asynchronous Form Master) -->
+<!DOCTYPE HTML>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Tiffin Bus Update Portal</title>
+    <style>
+      .main2 {
+        display: table;
+        margin:30px;
+        width: 500px;
+        margin: auto;
+        padding: 10px 10px 10px 10px;
+        border: 3px solid white;
+        border-radius: 10px;
+        text-align:left;
+      }
+      .main {
+        display: table;
+        width: 500px;
+        margin: auto;
+        padding: 10px 10px 10px 10px;
+        border: 3px solid blue;
+        border-radius: 10px;
+        text-align:left;
+      }
+      .instructions {
+        width: 90%;
+        text-align: left;
+        padding: 30px 10px 10px 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class='main2' id="header1">
+      <div id='Header' style="text-align:center;">
+        <h1>Controller Firmware Update</h1>
+      </div>
+    </div>
+    <div class='main2' id='instructions'>
+      This will roll a new version of software onto the server.  To accomplish this you must have a computer that can
+      join your network and the appropriate controller device.<br>
+      To use you need to:<br>
+      &emsp;1 - Receive a new version of the software from the developer in a '.bin' format and place it on your computer <br>
+      &emsp;2 - Place both your computer with the .bin file on it and your controller device on the same WiFi network<br>
+      &emsp;3 - In a supported browser go to 'yourSeverIPAddress'/Update.<br>
+      &emsp;4 - Click on the 'Choose File' button and choose the .bin file you received from the developer.<br>
+      &emsp;5 - Click on the 'Update' button.<p></p>
+      When the update is complete, the server will reboot automatically and your progress bar will show 100%.
+    </div>
+    
+    <div class="main" style="padding-left:50px;">
+      <!-- Clean container, no standard form submission actions -->
+      <input type='file' id='chooseF' accept=".bin" style="width: 750px;"><br>
+      <input type='button' style='margin-top:5px;' value='Update' onclick="uploadFirmwareAsynchronously()">
+      <br><br>
+      <label for="binDwnLoad">Downloading C++ code progress:</label>
+      <progress id="binDwnLoad" value="0" max="100"> 0% </progress>
+      <br>
+      <label for="percent"><b>Percent Done:</b></label>
+      <span id="percentDone">0%</span> <span id='binCdName'></span>
+    </div>
+
+    <script>
+       let gateway = `ws://${window.location.hostname}/ws`;
+       let websocket;
+       let myUUID = create_UUID();
+       let isUploading = false;
+       let controllerName = "";
+       let GTPPTimer = null;
+
+       // 1. Tell the browser to call onLoad when ready
+       window.addEventListener('load', onLoad);
+
+       // 2. REQUIRED: The actual onLoad function that was missing!
+       function onLoad(event) {
+         initWebSocket();
+       }
+
+       // 3. REQUIRED: Open the network path to your ESP32-C3 backend
+       function initWebSocket() {
+         myConsoleLog('Opening active WebSocket channel...');
+         websocket = new WebSocket(gateway);
+         websocket.onopen    = onOpen;
+         websocket.onclose   = onClose;
+         websocket.onmessage = processReceivedCommand;
+       }
+
+       function onOpen(event) {
+         myConsoleLog('WebSocket successfully linked to server.');
+       }
+
+       function onClose(event) {
+         if (isUploading) {
+           myConsoleLog('WebSocket closed intentionally for burning flash. Standing by for chip reboot.');
+           return;
+         }
+         myConsoleLog('Connection lost. Waiting 2 seconds before retrying handshake...');
+         setTimeout(initWebSocket, 2000);
+       }
+
+      // 4. Your clean, raw binary background uploader function
+      function uploadFirmwareAsynchronously() {
+        var fileInput = document.getElementById('chooseF');
+        if (!fileInput || fileInput.files.length === 0) {
+          alert("Please select a valid .bin firmware file first!");
+          return;
+        }
+
+        var file = fileInput.files[0]; // Select the single, raw file object cleanly
+        myConsoleLog("Streaming full binary sketch across network: " + file.name + " (" + file.size + " bytes)");
+        
+        isUploading = true; // Alerts your WebSocket routine to stand down safely
+
+        // --- CRITICAL FIX: WRAP THE FILE IN A FORMDATA CONTAINER ---
+        // This adds the standard multi-part boundary lines your C++ handler requires!
+        var uploadContainer = new FormData();
+        uploadContainer.append("update", file, file.name);
+        // -----------------------------------------------------------
+
+        var xhr = new XMLHttpRequest();
+        xhr.open("POST", "/doUpdate", true);
+
+        // Dynamically move your on-screen progress bar as the browser streams data over the network
+        xhr.upload.onprogress = function(event) {
+          if (event.lengthComputable) {
+            let percentDone = Math.round((event.loaded / event.total) * 100);
+            document.getElementById('binDwnLoad').value = percentDone;
+            document.getElementById('percentDone').innerHTML = percentDone + '%';
+          }
+        };
+
+        xhr.onload = function () {
+          if (xhr.status === 200) {
+            myConsoleLog("Success! The ESP32 received 100% of the file and is now rebooting.");
+            document.getElementById('binCdName').innerHTML = '<b> - Core Reflash Complete!</b>';
+            setTimeout(goToPrevPgAfterFWUpdate, 10000); // 10-second home redirect
+          } else {
+            alert("Upload transfer failed! Server responded with code: " + xhr.status);
+            isUploading = false;
+          }
+        };
+
+       xhr.onerror = function() {
+         let currentProgress = document.getElementById('binDwnLoad').value;
+         if (currentProgress >= 100) {
+           myConsoleLog("Network line dropped cleanly as target chip executed an internal reboot.");
+           document.getElementById('binCdName').innerHTML = '<b> - Core Reflash Complete!</b>';
+           setTimeout(goToPrevPgAfterFWUpdate, 10000);
+         } else {
+           alert("Network connection dropped mid-upload!");
+           isUploading = false;
+         }
+       };
+
+       // --- CRITICAL CHANGE: SEND THE CONTAINER, NOT THE RAW FILE ---
+       xhr.send(uploadContainer);
+       // -------------------------------------------------------------
+     }
+      
+      function initWebSocket() {
+        myConsoleLog('Opening active WebSocket channel...');
+        websocket = new WebSocket(gateway);
+        websocket.onopen    = onOpen;
+        websocket.onclose   = onClose;
+        websocket.onmessage = processReceivedCommand;
+      }
+
+      function onOpen(event) {
+        myConsoleLog('WebSocket successfully linked to server.');
+      }
+
+      function onClose(event) {
+        if (isUploading) {
+          myConsoleLog('WebSocket closed intentionally for burning flash. Standing by for chip reboot.');
+          return;
+        }
+        myConsoleLog('Connection lost. Waiting 2 seconds before retrying handshake...');
+        setTimeout(initWebSocket, 2000);
+      }
+
+      function sendText(data) {
+        if(websocket.readyState === WebSocket.OPEN) {
+          websocket.send("update:" + data);
+        } else {
+          setTimeout(() => { sendText(data); }, 10000);
+        }
+      }
+
+      function myConsoleLog(s) {
+        let tzo = new Date().getTimezoneOffset();
+        let tzoffset = (tzo * 60000);
+        let zone = new Date().toLocaleTimeString('en-us',{timeZoneName:'short'}).split(' ');
+        console.log((new Date(Date.now() - tzoffset)).toISOString().slice(0, -1) + '-' + zone +  " " + s);
+      }
+
+      function create_UUID(){
+        var dt = new Date().getTime();
+        var uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+            var r = (dt + Math.random()*16)%16 | 0;
+            dt = Math.floor(dt/16);
+            return (c=='x' ? r :(r&0x3|0x8)).toString(16);
+        });
+        return uuid;
+      }
+
+      function goToPrevPgAfterFWUpdate() {
+        myConsoleLog("GOING TO PREVIOUS PAGE");
+        history.go(-2);
+      }
+
+      function processReceivedCommand(evt)  {
+        let s = evt.data;
+        if(s.indexOf("MSG FOR CONSOLE") != -1) {
+          console.log(s.substring(15));
+          return;
+        }
+        if(s.indexOf('whoAreYou') != -1)  {
+          sendText('iAmAFWUpdatePage:' + myUUID);
+          return;
+        }
+        if(s.indexOf("Progress:") != -1) {
+          s = s.substring(9);
+          console.log("Flash progress sync tick: " + s + "%");
+          document.getElementById('binDwnLoad').value = parseInt(s);
+          document.getElementById('percentDone').innerHTML = s + '%';
+          if(parseInt(s) == 100) {
+            document.getElementById('binCdName').innerHTML = '<b> - Core Reflash Complete!</b>';
+            GTPPTimer = setTimeout(goToPrevPgAfterFWUpdate, 10000);
+          }
+          return;
+        }
+        if(evt.data.indexOf("newPgTitle:") != -1)  {
+          document.title = s.substring(s.indexOf("newPgTitle:") + 11) + " FW Update";
+          return;
+        }
+        if(evt.data.indexOf("newHeader:") != -1)  {
+          controllerName = s.substring(s.indexOf("newHeader:") + 10);
+          document.getElementById("Header").innerHTML = "<h1>" + controllerName + " Firmware Update</h1>";
+          return;
+        }
+      }
+    </script>
+  </body>
+</html>
