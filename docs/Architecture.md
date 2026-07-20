@@ -2,27 +2,35 @@
 
 ## Purpose
 
-EmbeddedInfrastructure is a reusable framework providing common infrastructure, hardware abstractions, and services for embedded applications. It intentionally excludes application-specific logic.
+The primary purpose of EmbeddedInfrastructure is to collect the functionality that is common across ESP32 applications into a reusable library. Those capabilities are implemented once, using consistent architectural principles and well-defined component responsibilities, allowing applications to focus on the functionality that makes them unique.
 
-EmbeddedInfrastructure is a reusable framework providing common infrastructure, hardware abstractions, and services for embedded applications. It intentionally excludes application-specific logic.
+By moving common functionality into a shared library:
 
-Its purpose is to provide a stable, consistent, and well-defined foundation upon which embedded applications can be built.
+- Common capabilities are implemented once rather than repeatedly.
+- Applications become smaller, simpler, and easier to understand.
+- All applications implement shared services in a consistent manner.
+- Improvements and bug fixes benefit every application that uses the library.
+- Debugging and maintenance are simplified because common functionality behaves consistently throughout the environment.
 
-The framework is designed to encourage correct architectural decisions through clearly defined ownership, encapsulation, and component responsibilities rather than through coding conventions alone.
+EmbeddedInfrastructure is intended to provide the common infrastructure required by many ESP32 applications. It intentionally excludes application-specific behavior, allowing each application to focus on the logic that makes it unique.
 
-### Framework Owns Infrastructure
+The application remains responsible for its own policies, decision making, device-specific behavior, and business logic. EmbeddedInfrastructure provides the common services upon which those applications are built.
+
+### Infrastructure Ownership
 
 EmbeddedInfrastructure provides reusable infrastructure services that are common across embedded applications.
 
-The framework owns the implementation and lifecycle of those services, including initialization, resource management, persistence, communication, and error handling.
+The infrastructure owns the implementation and lifecycle of those services, including initialization, resource management, persistence, communication, and error handling.
 
 Applications own the behavior that is built upon those services. They define application-specific data, policies, decision making, and business logic.
 
-This separation allows the framework to remain generic while allowing each application to express its own unique behavior.
+This separation allows the infrastructure to remain generic while allowing each application to express its own unique behavior.
 
 ## Guiding Principles
 
-The following principles define the architectural philosophy of EmbeddedInfrastructure. They are intended to guide the design of every component within the framework. When making architectural decisions, these principles take precedence over implementation convenience.
+The following principles define the architectural philosophy of EmbeddedInfrastructure. They are intended to guide the design of every component within the infrastructure. When making architectural decisions, these principles take precedence over implementation convenience.
+
+The library contains common infrastructure. Application-specific behavior remains in the application.
 
 ### Single Authoritative Owner
 
@@ -51,7 +59,7 @@ Applications provide policy.
 
 Infrastructure components implement reusable capabilities without making application-specific decisions. They provide the tools necessary to perform work but never decide when, why, or under what conditions those tools should be used.
 
-Applications are responsible for determining operational behavior by applying their own policies using the services provided by the framework.
+Applications are responsible for determining operational behavior by applying their own policies using the services provided by the infrastructure.
 
 Examples:
 
@@ -68,7 +76,7 @@ if (freshTankLevel >= 95)
     mqtt.publish(...);
 ```
 
-The framework provides the ability to publish an MQTT message.
+The infrastructure provides the ability to publish an MQTT message.
 
 The application decides when publishing is appropriate.
 
@@ -80,7 +88,7 @@ Separating mechanism from policy allows infrastructure components to remain reus
 
 Each component shall have one clearly defined primary responsibility.
 
-As the framework evolves, new functionality should be placed into the component whose responsibility most naturally includes it. If new functionality does not clearly belong to an existing component, a new component should be created rather than expanding an unrelated one.
+As the infrastructure evolves, new functionality should be placed into the component whose responsibility most naturally includes it. If new functionality does not clearly belong to an existing component, a new component should be created rather than expanding an unrelated one.
 
 Large "utility" or "common" modules should be viewed as indicators that architectural refactoring is needed.
 
@@ -118,7 +126,7 @@ This abstraction provides several important benefits:
 
 - Third-party libraries may be replaced without requiring changes to application code.
 - Infrastructure components present a consistent interface across all applications.
-- Vendor-specific implementation details remain isolated within the framework.
+- Vendor-specific implementation details remain isolated within the infrastructure.
 - Applications become easier to maintain, test, and understand.
 
 A component should know only what another component's public interface promises. It should never rely on internal implementation details or private state.
@@ -178,9 +186,9 @@ Each component shall document the following:
 
 EmbeddedInfrastructure is intended to evolve through the addition of new services and components while preserving the architectural principles defined in this document.
 
-New functionality should strengthen the framework rather than increase coupling or duplicate responsibilities.
+New functionality should strengthen the infrastructure rather than increase coupling or duplicate responsibilities.
 
-As the framework grows, simplicity, clarity, and well-defined ownership shall take precedence over convenience or expedient implementation.
+As the infrastructure grows, simplicity, clarity, and well-defined ownership shall take precedence over convenience or expedient implementation.
 
-The goal of EmbeddedInfrastructure is not to become a collection of reusable code, but to become a coherent foundation upon which reliable embedded applications can be built and maintained for years to come.
+The goal of EmbeddedInfrastructure is not simply to collect reusable code, but to provide a coherent, consistent foundation upon which reliable embedded applications can be built and maintained for years to come.
 
