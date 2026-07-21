@@ -58,21 +58,20 @@ bool Network::connect(String& ssid, String& pwd, int from) {
   // 3. Fire the automated connection and fallback routine
   // Pass your custom Access Point name from your existing constant data pointer
   network.logInfo("Handing connection control to the automated WiFiManager pipeline..." + conv.fromStr(from));
-//  bool success = wm.autoConnect(constDataPtr->accessPtName.c_str());
-  bool success = wm.autoConnect(constDataPtr->accessPtName.c_str());
+  bool success = wm.autoConnect(appConsts.accessPtName.c_str());
 
   if (!success) {
     network.logInfo("Failed to connect to SSID " + ssid + " and portal timed out. Initializing AP fallback state." + conv.fromStr(from));
     
     // Set your existing global status track variables exactly like your old code did
     WiFi.mode(WIFI_AP);
-    WiFi.softAP(constDataPtr->accessPtName);
+    WiFi.softAP(appConsts.accessPtName);
     accessPtIP = WiFi.softAPIP().toString();
     srvIPAddr = accessPtIP;
     connectedSSID = "accessPt";
     AP_createdTime = millis();
     
-    network.logInfo("Access point name: " + constDataPtr->accessPtName + conv.fromStr(from));
+    network.logInfo("Access point name: " + appConsts.accessPtName + conv.fromStr(from));
     network.logInfo("AP IP address: " + accessPtIP + conv.fromStr(from));
     dividerStr(FN, LN);
     return false;

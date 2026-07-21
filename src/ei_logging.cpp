@@ -1,5 +1,6 @@
 
 #include <Arduino.h>
+#include <ei_types.h>
 #include <ei_logging.h>
 #include <ei_time.h>
 #include <ei_conversion.h>
@@ -22,10 +23,10 @@ String Logging::doJsonStrLogEntry(const WhoAmI& whoAmI, T::Type recordType, L::L
   JsonDocument doc;
 
   doc["deviceSequence"] = devSeq++;
-  doc["eventTime"]      = getLogTimeStamp();
-  doc["component"]      = constData.appShortName;
-  doc["function"]       = whoAmI.functionName;
-  doc["line"]           = whoAmI.lineNo;
+  doc["eventTime"]      = eiTime.getLogTimeStamp();
+  doc["component"]      = appConsts.appShortName;
+  doc["function"]       = whoAmI.function;
+  doc["line"]           = whoAmI.line;
   doc["recordType"]     = T::toString(recordType);
   doc["level"]          = L::toString(level);
   doc["eventType"]      = ET::toString(eventType);
@@ -33,7 +34,9 @@ String Logging::doJsonStrLogEntry(const WhoAmI& whoAmI, T::Type recordType, L::L
 
   return conv.jsonObjToJsonStr(doc);
 }
-/*-----  CUSTOMIZED SERIAL.PRINT  -----*/
+/*-----  CUSTOMIZED SERIAL.PRINT  -----*/     // Return the canonical timestamp for log records.
+                                              // Before time synchronization this is milliseconds since boot.
+                                              // After synchronization it becomes the configured date/time format.
 
 void Logging::msg(const WhoAmI& whoAmI, T::Type recordType, L::Level level, ET::Type eventType, const String& message) {
   Serial.print(doSerialMonLogEntry(whoAmI, recordType, level, eventType, message));
@@ -62,7 +65,26 @@ void Logging::sendToSyslog(String s) {
 
 /*-----  PUT A DIVIDER IN IN THE LOG  -----*/
 
+// THIS IS INTENDED TO PUT A FORMATED DIVIDER LINE IN A LOG (EVENT) FILE
+
 String Logging::dividerStr(const String& function, int line) {
     return "----- " + function + ":" + String(line) +
            " -------------------------------------";
+}f
+
+
+const char* T::toTxt(Type type) 
+{
+    return conv.enumToTxt(
+        type,
+        typeNames,
+        sizeof(typeNames) / sizeof(typeNames[0]));
+}
+
+String T::toStr(Type type)
+{
+    return conv.enumToStr(
+        type,
+        typeNames,
+        sizeof(typeNames) / sizeof(typeNames[0]));
 }

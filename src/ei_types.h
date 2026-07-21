@@ -1,13 +1,38 @@
+#pragma once
+
 //
-//  ei_types.cpp
-//  
+//  ei_types.h
+//
 //
 //  Created by Stephen McKeon on 7/19/26.
 //
 
+#include <Arduino.h>
+#include <stdint.h>
+
+//======================================================
+// Common Type Aliases
+//======================================================
+
 using DeviceId = uint16_t;
 
+//======================================================
+// Common Enumerations
+//======================================================
 
-enum class LogLevel : uint8_t {
-  None = 0
+
+
+//======================================================
+// Common Structures
+//======================================================
+
+struct AppConsts {
+    String pgTitle;
+    String accessPtName;
+    String pageHeader;
+    String uploadPg;
+    String appName;
+    String appShortName;
 };
+
+extern AppConsts appConsts;

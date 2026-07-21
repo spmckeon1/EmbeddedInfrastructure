@@ -7,6 +7,12 @@
 
 EiTime eiTime;
 
+/*-----  TIME EVENT LOOP  -----*/
+
+bool EiTime::eventLoop() {
+    return false;
+}
+
 /*---------------    STARTUP THE EZTIME TIME SERVICE  ---------------*/
 
 bool EiTime::begin() {
@@ -55,4 +61,39 @@ bool EiTime::begin() {
 
 String EiTime::getLogTimeStamp() {
   return String(millis()) + "ms";               // put the milliseconds into 't'
+}
+
+
+/*-----  READ THE EITIME CONFIGURATION FILE  -----*/
+
+bool EiTime::readConfigFromDisk() {
+    JsonDocument doc;
+
+    if (!myStorage.readJsonFile(_configFileName, doc))
+        return false;
+
+    _config.olsonName = doc["olsonName"] | _config.olsonName;
+    _config.posixRule = doc["posixRule"] | _config.posixRule;
+
+    return true;
+}
+
+/*-----  WRITE THE EITIME CONFIGURATION FILE  -----*/
+
+bool EiTime::writeConfigToDisk() {
+    JsonDocument doc;
+
+    doc["olsonName"] = _config.olsonName;
+    doc["posixRule"] = _config.posixRule;
+
+    return myStorage.writeJsonFile(_configFileName, doc);
+}
+
+/*-----  CREATE THE CONFIG JSN OBJECT FROM MEMORY CONTENTS  -----*/
+
+JsonDocument EiTime::createEiTimeCfgJson() {
+    JsonDocument doc;
+    doc["olsonName"] = _config.olsonName;
+    doc["posixRule"] = _config.posixRule;
+    return doc;
 }

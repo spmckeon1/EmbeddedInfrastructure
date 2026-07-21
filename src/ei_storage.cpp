@@ -494,25 +494,17 @@ int Storage::ensureFileExistsLazy(String fname, String (*dataGenerator)(), int f
 
 /*---------------    IF FILE DOES/DOES NOT EXIST ---------------*/
 
-bool Storage::ensureFileExists(String fname, String data, int from) {
- if(!_fs->exists(fname)) {                                                            // if the file does not exist
-   if(data == "") {                                                                   // if 'data' is an empty string
-     storage.logInfo("The file '" + fname + "' does not exist. Please copy it to"     // log the error and ask for resolution
-                     " the " + String(fileSystemName()) + " file system");
-     return false;
-   } else {                                                                           // data is not an empty string
-     bool success = createFile(fname.c_str(), data.c_str());                          // so create the file and write 'data' into it
-     if(!success) {                                                                   // if the file failed to be created and populated
-       storage.logInfo("ERROR: Failed to create the file '" + fname + conv.fromStr(from));
-     } else {
-       storage.logInfo("Successfully created missing file: '" + fname + conv.fromStr(from));
-     }
-     return success;                                                                  // Returns true if the file was successfully created fresh
-   }
- } else {
-   storage.logInfo("The file '" + fname + "' exists." + conv.fromStr(from));               // log that it exists
-   return true;                                                                       // the file existed so return true
- }
+int MySDClass::ensureFileExists(const String& fileName, const JsonDocument& doc, int from){
+  if (_fs->exists(fileName)) {
+    storage.logInfo("The file '" + fileName + "' exists." + fromStr(from));
+    return FILE_ALREADY_EXISTS;
+  }
+  if (!writeJsonFile(fileName, doc, from)) {
+    storage.logError("Failed to create file '" + fileName + "'" + fromStr(from));
+    return FILE_ERROR;
+  }
+  storage.logInfo("Successfully created missing file '" + fileName + "'" + fromStr(from));
+  return FILE_WAS_CREATED;
 }
 
 /*---------------  GET RAW FILESYSTEM REFERENCE  ---------------*/
@@ -592,3 +584,23 @@ void Storage::logError(const String& msg) {
 }
 
 
+
+/*-----  WRITE A JSON FILE TO DISK  -----*/
+
+int Storage::writeJsonFile(const char* path, const JsonDocument& doc, int from) {
+    String json;
+    serializeJson(doc, json);
+    return writeFile(path, json.c_str(), from);
+}
+
+/*-----  READ A JSON FILE FROM DISK  -----*/
+
+bool Storage::readJsonFile(const char* path, JsonDocument& doc, int from) {
+    String json = readFile(path, from);
+    auto err = deserializeJson(doc, json);
+  if (err) {
+    logging.msg("Unable to parse JSON file '%s': %s", path, err.c_str());
+    return false;
+  }
+  return true;
+}

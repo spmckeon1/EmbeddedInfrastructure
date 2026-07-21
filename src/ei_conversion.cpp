@@ -27,3 +27,17 @@ bool Conversion::jsonStrToJsonObj(const String& json, JsonDocument& doc) {
 String Conversion::fromStr(int from) {
     return " [FROM: " + String(from) + "]";
 }
+
+/*---------------  CONVERT A ENUM TO IT'S TEXTVALUE STORED IN A CONSTEXPR ARRAY  ---------------*/
+
+const char* Conversion::enumToTxt(int value, const char* const* names, int count) {
+    if (value < 0 || value >= count)
+        return "UNKNOWN";
+    return names[value];
+}
+
+/*---------------  CONVERT A ENUM STRING  ---------------*/
+
+String Conversion::enumToStr(int value, const char* const* names, int count) {
+  return String(enumToTxt(value, names, count));
+}

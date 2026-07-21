@@ -21,6 +21,7 @@
 // -----------------------------------------------------------------------------
 
 #include <Arduino.h>
+#include <ei_types.h>
 
 #define FN __func__           // compiler get function name
 #define LN __LINE__               // what line was the compiler on
@@ -31,55 +32,91 @@ enum class LogDestination {
 };
 
 namespace T {           // Type
-    enum Type {
-        SYSLOG,         // Diagnostic text
-        TEMPERATURE,    // Temperature measurement
-        METRIC,         // Numeric measurement
-        GPS,            // GPS fix/position
-        POWER,          // Electrical measurements
-        NETWORK,        // Network statistics
-        EVENT           // Structured application event
-    };
+  enum Type {
+    SYSLOG,         // Diagnostic text
+    TEMPERATURE,    // Temperature measurement
+    METRIC,         // Numeric measurement
+    GPS,            // GPS fix/position
+    POWER,          // Electrical measurements
+    NETWORK,        // Network statistics
+    EVENT           // Structured application event
+  };
+
+  inline constexpr const char* typeNames[] = {
+    "SYSLOG",
+    "TEMPERATURE",
+    "METRIC",
+    "GPS",
+    "POWER",
+    "NETWORK",
+    "EVENT"
+  };
+  const char* toTxt(Type type);
+  String toStr(Type type);
 }
 
-namespace L {
-    enum Level {
-        DEBUG,
-        INFO,
-        WARN,
-        ERROR,
-        FATAL
-    };
+namespace L {           // Level
+  enum Level {
+    DEBUG,
+    INFO,
+    WARN,
+    ERROR,
+    FATAL
+  };
+  inline constexpr const char* levelNames[] = {   // Keep this table in the same order as the Level enum.
+    "DEBUG",
+    "INFO",
+    "WARN",
+    "ERROR",
+    "FATAL"
+  };
 }
 
 namespace ET {          // Event Type / Category
-    enum Type {
-        GENERAL,
+  enum Type {
+    GENERAL,
 
-        // Infrastructure
-        STORAGE,
-        NETWORK,
-        MQTT,
-        WIFI,
-        TIME,
+    STORAGE,        // Infrastructure
+    NETWORK,
+    MQTT,
+    WIFI,
+    TIME,
 
-        // Hardware
-        GPS,
-        ET_SERIAL,
-        SENSOR,
+    GPS,            // Hardware
+    ET_SERIAL,
+    SENSOR,
 
-        // System
-        MEMORY,
-        CONFIG,
-        STARTUP,
-        SHUTDOWN,
+    MEMORY,           // System
+    CONFIG,
+    STARTUP,
+    SHUTDOWN,
 
-        // Application
-        USER,
-        COMMAND
-    };
+    USER,             // Application
+    COMMAND
+  };
+
+  inline constexpr const char* eventTypeNames[] = {     // Keep this table in the same order as the Type enum.
+    "GENERAL",
+
+    "STORAGE",
+    "NETWORK",
+    "MQTT",
+    "WIFI",
+    "TIME",
+
+    "GPS",
+    "SERIAL",
+    "SENSOR",
+
+    "MEMORY",
+    "CONFIG",
+    "STARTUP",
+    "SHUTDOWN",
+
+    "USER",
+    "COMMAND"
+  };
 }
-
 struct WhoAmI {                   // contains log msg file name, code line number, and function name
     const char* file;
     int line;

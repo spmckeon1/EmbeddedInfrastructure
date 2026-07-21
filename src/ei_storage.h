@@ -53,8 +53,7 @@
   #error "CRITICAL CONFIG ERROR: 'myConfig.h' is missing from your project folder. Please copy a template copy into your local sketch directory."
 #endif
 
-[[deprecated("LEGACY NOTICE: FS_IN_USE is deprecated. Migrate this file to myFileSys class calls.")]]
-
+#include <ei_types.h>
 
 #include <ei_time.h>
 #include <ei_logging.h>
@@ -166,6 +165,8 @@ public:
   void getInfo(StorageInfo& info) const;
   void logInfo(const String& msg);
   void logError(const String& msg);
+  int writeJsonFile(const char* path, const JsonDocument& doc, int from);
+  bool readJsonFile(const char* path, JsonDocument& doc, int from)
 };
 
 // ============================================================================

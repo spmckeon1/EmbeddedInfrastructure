@@ -21,10 +21,10 @@
 // -----------------------------------------------------------------------------
 
 #include <Arduino.h>
-//#include <ezTime.h>
+#include <ei_types.h>
+#include <ei_configuration.h>
 
 struct TimeConfig {       // Default to U.S. Mountain Time. Applications may override as needed.
-    String abbreviation = "MDT";
     String olsonName = "America/Denver";
     String posixRule = "MST7MDT,M3.2.0,M11.1.0";
 };
@@ -40,11 +40,14 @@ struct TimeState {
 class EiTime
 {
 private:
+  static constexpr const char* _configFileName = "ei_timeCfg.json";
   TimeConfig _config;
   TimeState  _state;
-//  TimeStats  _stats;
-//  Timezone   _tz;
   
+  bool eventLoop();
+  bool readConfigFromDisk();
+  bool writeConfigToDisk();
+  JsonDocument createEiTimeCfgJson() const;
 
 public:
   bool begin();

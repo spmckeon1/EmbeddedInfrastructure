@@ -6,6 +6,7 @@
 //  Created by Stephen McKeon on 7/18/26.
 //
 
+#include <ei_types.h>
 
 struct NetworkCredentials {
     bool dirty = false;

@@ -29,6 +29,8 @@
 //   - Application-specific startup logic
 // -----------------------------------------------------------------------------
 
+#include <ei_types.h>
+
 
 // FOREWARD DECLARATIONS
 extern void startupFileChk();

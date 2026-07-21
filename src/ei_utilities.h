@@ -16,3 +16,5 @@
 //     - Move functionality into a more appropriate module whenever possible.
 //
 // -----------------------------------------------------------------------------
+
+#include <ei_types.h>
