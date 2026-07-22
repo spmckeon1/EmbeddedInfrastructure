@@ -1,49 +1,4 @@
 #pragma once
-//
-//  ei_storage.h
-//  
-//
-//  Created by Stephen McKeon on 7/17/26.
-//
-
-// -----------------------------------------------------------------------------
-// EmbeddedInfrastructure
-//
-// Module:
-//     Storage
-//
-// Owns:
-//
-//     - Filesystem abstraction
-//     - File operations
-//     - Directory operations
-//     - Filesystem initialization
-//
-// Provides:
-//
-//     - Read files
-//     - Write files
-//     - Append files
-//     - Delete files
-//     - Rename files
-//     - Create directories
-//     - Enumerate directories
-//     - Query filesystem information
-//
-// Does Not Own:
-//
-//     - Startup policy
-//     - Configuration data
-//     - Which files should exist
-//     - Default file contents
-//
-// Goal:
-//
-//     Provide a single, consistent interface for persistent storage while
-//     hiding the underlying filesystem implementation (LittleFS, SD, or
-//     future storage technologies).
-//
-// -----------------------------------------------------------------------------
 
 #if __has_include("myConfig.h")
   #include "myConfig.h"
@@ -120,28 +75,19 @@ struct StorageInfo {
 // -----------------------------------------------------------------------------
 
 class Storage {
-private:
-  fs::FS* _fs;
-  StorageStats _stats;
-#ifdef SYSTEM_USES_LITTLEFS
-  bool startLittleFS();
-  void refreshLittleFSStats();
-#endif
-#ifdef SYSTEM_USES_SD
-  bool startSD(int cspin);
-  void refreshSDStats();
-#endif
-  void refreshStats();
-  void buildDirReport(String &report, const char *dirname, uint8_t levels);
-
 public:
-  // Lifecycle plumbing
-  Storage();
+  Storage();      // WHAT DOES THIS DO?
+  
+  enum class EnsureFileResult {
+      Created,
+      AlreadyExists,
+      Error
+  };
+
 
   /* LEGACY TRAP BLOCK FOR DEPRECATED fileExists() */
   [[deprecated("WARNING: fileExists() has been renamed to ensureFileExists(). Please update your code call.")]]
   inline bool fileExists(String fname, String data, int from) {
-    return ensureFileExists(fname, data, from);
   }
   bool startFileSystem();
   void dirReport(const char *dirname, uint8_t levels);
@@ -158,15 +104,35 @@ public:
   void testFileIO(const char * path);
   int getFileSize(const char * path);
   bool createDirIfNotExist(String dirName);
-  int ensureFileExistsLazy(String fname, String (*dataGenerator)(), int from);
-  bool ensureFileExists(String fname, String data, int from);
+  int ensureFileExists(const String& fileName, const JsonDocument& doc, int from);
   const char* fileSystemName() const;
   fs::FS& getFS();
   void getInfo(StorageInfo& info) const;
+  int writeJsonFile(const char* path, const JsonDocument& doc, int from);
+  bool readJsonFile(const char* path, JsonDocument& doc, int from);
+  void writeLog(const String& logEntry);
+
+private:
+  static constexpr int MAX_RAM_LINES    = 150;      // RAM log
+  static constexpr int MAX_LOG_LINE_LEN = 256;
+  char _ramLog[MAX_RAM_LINES][MAX_LOG_LINE_LEN];
+  int  _writeIndex = 0;
+  bool _wrapped    = false;
+
+  fs::FS* _fs;                                      // File system
+  StorageStats _stats;
+  #ifdef SYSTEM_USES_LITTLEFS
+    bool startLittleFS();
+    void refreshLittleFSStats();
+  #endif
+  #ifdef SYSTEM_USES_SD
+    bool startSD(int cspin);
+    void refreshSDStats();
+  #endif
+  void refreshStats();
+  void buildDirReport(String &report, const char *dirname, uint8_t levels);
   void logInfo(const String& msg);
   void logError(const String& msg);
-  int writeJsonFile(const char* path, const JsonDocument& doc, int from);
-  bool readJsonFile(const char* path, JsonDocument& doc, int from)
 };
 
 // ============================================================================

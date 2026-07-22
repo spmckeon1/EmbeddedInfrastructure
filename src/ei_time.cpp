@@ -3,6 +3,8 @@
 //#include <ezTime.h>
 
 #include <Arduino.h>
+#include <ArduinoJson.h>
+#include <ei_storage.h>
 #include <ei_time.h>
 
 EiTime eiTime;
@@ -11,6 +13,24 @@ EiTime eiTime;
 
 bool EiTime::eventLoop() {
     return false;
+}
+
+/*-----  TAKE CARE OFF ALL THE ACTIONS NECESSAY TO ENSURE IETIME HAS WHAT IT NEEDS TO RUN  -----*/
+
+bool EiTime::setup() {
+//  TimeConfig config;
+  JsonDocument doc;
+  storage.ensureFileExists(_configFileName, createConfigJson(_config), LN);         // Create the configuration file with defaults if it doesn't exist.
+  if (!storage.readJsonFile(_configFileName, doc, LN)) {                            // Read the configuration file.
+    eiTime.logError("Failed to read: " + String(_configFileName));
+    return false;
+  }
+  loadConfigFromJson(doc, _config);                                                 // Populate the working configuration.
+  if (!validateConfiguration(_config)) {                                            // if validate fails then
+    _config = TimeConfig{};                                                         // set it to the defauts
+    storage.writeJsonFile(_configFileName, createConfigJson(_config), LN);          // and write it to disk
+  }
+  return true;
 }
 
 /*---------------    STARTUP THE EZTIME TIME SERVICE  ---------------*/
@@ -22,7 +42,7 @@ bool EiTime::begin() {
 
   lastAttempt = millis();
  if (timeStatus() != timeSet) {                               // STEP 1 - Wait for NTP synchronization.
-    logging.info("Waiting for NTP synchronization...");
+   eiTime.logInfo("Waiting for NTP synchronization...");
     updateNTP();
     return false;
   }
@@ -45,12 +65,12 @@ bool EiTime::begin() {
         _state.ready = true;
         return true;
     }
-    logging.warn("Unable to resolve Olson timezone.");
+    eiTime.logError("Unable to resolve Olson timezone.");
     return false;
   }
-  logging.warn("No timezone configured. Using default.");   // STEP 4 - Final fallback.
-  _tz.setPosix(DEFAULT_POSIX_RULE);
-  _config.posixRule = DEFAULT_POSIX_RULE;
+  eiTime.logError("No timezone configured. Using default.");   // STEP 4 - Final fallback.
+  _tz.setPosix(_config.posixRule);
+  _config.posixRule = _config.posixRule;
   _state.posixChanged = true;
   _state.abbreviation = _tz.dateTime("T");
   _state.ready = true;
@@ -68,8 +88,7 @@ String EiTime::getLogTimeStamp() {
 
 bool EiTime::readConfigFromDisk() {
     JsonDocument doc;
-
-    if (!myStorage.readJsonFile(_configFileName, doc))
+    if (!storage.readJsonFile(_configFileName, doc, LN))
         return false;
 
     _config.olsonName = doc["olsonName"] | _config.olsonName;
@@ -86,14 +105,50 @@ bool EiTime::writeConfigToDisk() {
     doc["olsonName"] = _config.olsonName;
     doc["posixRule"] = _config.posixRule;
 
-    return myStorage.writeJsonFile(_configFileName, doc);
+    return storage.writeJsonFile(_configFileName, doc, LN);
 }
 
-/*-----  CREATE THE CONFIG JSN OBJECT FROM MEMORY CONTENTS  -----*/
+/*-----  CREATE THE CONFIG JS)N OBJECT FROM THE cfg CONTENTS  -----*/
 
-JsonDocument EiTime::createEiTimeCfgJson() {
+JsonDocument EiTime::createConfigJson(const TimeConfig& cfg) const {
     JsonDocument doc;
-    doc["olsonName"] = _config.olsonName;
-    doc["posixRule"] = _config.posixRule;
+    doc["olsonName"] = cfg.olsonName;
+    doc["posixRule"] = cfg.posixRule;
     return doc;
 }
+
+/*-----  PUT THE JSON OBJECT READ FROM DISK INTO A SUPPLIED TimeConfig STRUCT   -----*/
+
+void EiTime::loadConfigFromJson(const JsonDocument& doc, TimeConfig& cfg) const {
+    if (doc["olsonName"].is<String>())
+        cfg.olsonName = doc["olsonName"].as<String>();
+    if (doc["posixRule"].is<String>())
+        cfg.posixRule = doc["posixRule"].as<String>();
+}
+
+/*-----  VALIDATE AS MUCH AS POSSIBLE THE JSIN OBJECT READ FRM DISK  -----*/
+
+bool EiTime::validateConfiguration(const TimeConfig& cfg) {
+  if (cfg.olsonName.isEmpty() || cfg.posixRule.isEmpty()) {
+    eiTime.logError("Failed to validate TimeConfig: "
+                    "cfg.posixRule: " + cfg.posixRule +
+                    "cfg.olsonName: " + cfg.olsonName
+                    );
+    return false;
+  }
+  return true;
+}
+
+/*-----  PUT THE RIGHT HEADERS INTO A LOG MSG  -----*/
+
+void EiTime::logInfo(const String& msg) {
+    logging.msg(WHOAMI, T::SYSLOG, L::INFO, ET::TIME, msg);
+}
+
+/*-----  PUT THE RIGHT HEADERS INTO A LOG MSG  -----*/
+
+void EiTime::logError(const String& msg) {
+    logging.msg(WHOAMI, T::SYSLOG, L::ERROR, ET::TIME, msg);
+}
+
+

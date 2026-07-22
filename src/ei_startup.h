@@ -33,5 +33,5 @@
 
 
 // FOREWARD DECLARATIONS
-extern void startupFileChk();
+//extern void startupFileChk();
 

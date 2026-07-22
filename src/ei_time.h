@@ -21,6 +21,8 @@
 // -----------------------------------------------------------------------------
 
 #include <Arduino.h>
+#include <ArduinoJson.h>
+#include <ezTime.h>
 #include <ei_types.h>
 #include <ei_configuration.h>
 
@@ -43,11 +45,17 @@ private:
   static constexpr const char* _configFileName = "ei_timeCfg.json";
   TimeConfig _config;
   TimeState  _state;
+  Timezone _tz;                           // the ezTime time zone struct
   
   bool eventLoop();
+  bool setup();
   bool readConfigFromDisk();
   bool writeConfigToDisk();
-  JsonDocument createEiTimeCfgJson() const;
+  JsonDocument createConfigJson(const TimeConfig& cfg) const;
+  void loadConfigFromJson(const JsonDocument& doc, TimeConfig& cfg) const;
+  bool validateConfiguration(const TimeConfig& cfg);
+  void logInfo(const String& msg);
+  void logError(const String& msg);
 
 public:
   bool begin();

@@ -70,6 +70,8 @@ namespace L {           // Level
     "ERROR",
     "FATAL"
   };
+  const char* toTxt(Level level);
+  String toStr(Level level);
 }
 
 namespace ET {          // Event Type / Category
@@ -116,7 +118,10 @@ namespace ET {          // Event Type / Category
     "USER",
     "COMMAND"
   };
+  const char* toTxt(Type type);
+  String toStr(Type type);
 }
+
 struct WhoAmI {                   // contains log msg file name, code line number, and function name
     const char* file;
     int line;
@@ -130,15 +135,16 @@ struct WhoAmI {                   // contains log msg file name, code line numbe
 
 class Logging {
 private:
-  String doSerialMonLogEntry(String event, String functionName, int lineNo);
-  String doJsonStrLogEntry(const WhoAmI& whoAmI, T::Type recordType, L::Level level, ET::Type eventType, const String& message);
-  void sendToSyslog(String s);
+  LogDestination _dest = LogDestination::RamBuffer;
+  String formatSerialLogEntry(const WhoAmI& whoAmI, const String& msg);
+  String formatJsonStrLogEntry(const WhoAmI& whoAmI, T::Type recordType, L::Level level, ET::Type eventType, const String& message);
+  void sendToNodeRedLogging(String logEntry);
   
 public:
 
   void msg(const WhoAmI& whoAmI, T::Type recordType, L::Level level, ET::Type eventType, const String& message);
-  void msg(const String& event, const String& functionName, int lineNo);
   String dividerStr(const String& function, int line);
+  void setDestination(LogDestination destination);
 };
 
 extern Logging logging;

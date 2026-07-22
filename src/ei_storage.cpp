@@ -21,7 +21,9 @@
 #include <Arduino.h>
 #include <ArduinoTrace.h>
 #include <ei_conversion.h>
+#include <ei_web.h>
 #include <ei_storage.h>
+
 
 // ============================================================================
 // 🎯 THE CRITICAL PHYSICAL ALLOCATION LINE
@@ -32,7 +34,7 @@ Storage storage;        // This brings the object to life in memory!
 // CLASS LIFECYCLE MANAGEMENT
 // ============================================================================
 
-/*---------------    AUTIMATICALLY CLEARS THE INTERNAL POINTER AT BOOT   ---------------*/\
+/*---------------    AUTIMATICALLY CLEARS THE INTERNAL POINTER AT BOOT   ---------------*/
 
 Storage::Storage()
     : _fs(nullptr)
@@ -288,7 +290,7 @@ size_t Storage::load_data(File f, uint8_t *buffer, size_t maxLen, size_t index) 
     storage.logInfo("Reading file:'" + String(f.name()) + "' maxLen ='" + String(maxLen) + "'");  // log that the file was read from
     return f.read(buffer, maxLen);                                                                // read maxLen bytes from the file 'f'
   } else {                                                                                        // else, there must be no bytes left in the file to read
-    downloadingFile = false;                                                                      // tell the server the download is complete
+    web.setDownloadingFile(false);                                                                    // tell the server the download is complete
     storage.logInfo("Web page file download '" + String(f.name()) + "' has completed.");          // log the read is complete
     f.close();                                                                                    // close the file
     return 0;                                                                                     // and return the length of the read...zero bytes
@@ -460,50 +462,18 @@ bool Storage::createDirIfNotExist(String dirName) {
   }
 }
 
-/*--------------- NEW LAZY FILE INITIALIZATION FUNCTION ---------------*/
-/*
-String (*dataGenerator)() is a pointer to a function that takes no
-parameters and returns a String containing the default contents for
-the file.
-*/
-
-int Storage::ensureFileExistsLazy(String fname, String (*dataGenerator)(), int from) {
-  int statusResult = FILE_ERROR;                                                                // Create a variable to hold our final answer, defaulting to an error state
- if (_fs->exists(fname)) {                                                                      //SCENARIO 1: The file already exists on disk
-   storage.logInfo("The file '" + fname + "' exists."  + conv.fromStr(from));
-   statusResult = FILE_ALREADY_EXISTS; // Explicitly set it here
-   return statusResult;
- }
- String data = dataGenerator();                                                                 // SCENARIO 2: The file is missing, generate defaults
- if (data == "") {
-   storage.logInfo("The file '" + fname + "' does not exist." + conv.fromStr(from));
-   return FILE_ERROR;
- }
- int bytesWritten = writeFile(fname.c_str(), data.c_str(), from);                               // Write the default data using your standardized routine
- if (bytesWritten >= 0) {                                                                       // Explicitly verify the output of your write action
-   storage.logInfo("Successfully created missing file: '" + fname + conv.fromStr(from));
-   statusResult = FILE_WAS_CREATED;                                                             // Explicitly set it ONLY upon a successful write!
- } else {
-   storage.logError("ERROR: Failed to create file '" + fname + conv.fromStr(from));
-   statusResult = FILE_ERROR;
- }
-
- return statusResult;                                                                           // Return the explicitly tracked state
-}
-
-
 /*---------------    IF FILE DOES/DOES NOT EXIST ---------------*/
 
-int MySDClass::ensureFileExists(const String& fileName, const JsonDocument& doc, int from){
+int Storage::ensureFileExists(const String& fileName, const JsonDocument& doc, int from){
   if (_fs->exists(fileName)) {
-    storage.logInfo("The file '" + fileName + "' exists." + fromStr(from));
+    storage.logInfo("The file '" + fileName + "' exists." + conv.fromStr(from));
     return FILE_ALREADY_EXISTS;
   }
-  if (!writeJsonFile(fileName, doc, from)) {
-    storage.logError("Failed to create file '" + fileName + "'" + fromStr(from));
+  if (!writeJsonFile(fileName.c_str(), doc, from)) {
+    storage.logError("Failed to create file '" + fileName + "'" + conv.fromStr(from));
     return FILE_ERROR;
   }
-  storage.logInfo("Successfully created missing file '" + fileName + "'" + fromStr(from));
+  storage.logInfo("Successfully created missing file '" + fileName + "'" + conv.fromStr(from));
   return FILE_WAS_CREATED;
 }
 
@@ -599,8 +569,21 @@ bool Storage::readJsonFile(const char* path, JsonDocument& doc, int from) {
     String json = readFile(path, from);
     auto err = deserializeJson(doc, json);
   if (err) {
-    logging.msg("Unable to parse JSON file '%s': %s", path, err.c_str());
+    storage.logError("Unable to parse JSON file: " + String(path) + "Error = " + String(err.c_str()));
+//    logging.msg("Unable to parse JSON file '%s': %s", path, err.c_str());
     return false;
   }
   return true;
+}
+
+/*-----  WRITE A LOGGING EVENT TO THE RAM DISK  -----*/
+
+void Storage::writeLog(const String& logEntry) {
+  strncpy(_ramLog[_writeIndex], logEntry.c_str(), MAX_LOG_LINE_LEN - 1);
+  _ramLog[_writeIndex][MAX_LOG_LINE_LEN - 1] = '\0';
+  _writeIndex++;
+  if (_writeIndex >= MAX_RAM_LINES) {
+    _writeIndex = 0;
+    _wrapped = true;
+  }
 }
