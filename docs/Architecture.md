@@ -1,3 +1,4 @@
+
 # EmbeddedInfrastructure Architecture
 
 ## Purpose
@@ -31,6 +32,14 @@ This separation allows the infrastructure to remain generic while allowing each 
 The following principles define the architectural philosophy of EmbeddedInfrastructure. They are intended to guide the design of every component within the infrastructure. When making architectural decisions, these principles take precedence over implementation convenience.
 
 The library contains common infrastructure. Application-specific behavior remains in the application.
+
+Subsystems should perform work in bounded time slices whenever practical. Long-running operations should be decomposed into incremental steps executed over successive calls to loop().
+
+Subsystem state is private by default. Public interfaces are added only when another subsystem has a legitimate need that cannot be satisfied through an existing higher-level operation.
+
+Prefer exposing capabilities over exposing implementation details.
+
+
 
 ### Single Authoritative Owner
 

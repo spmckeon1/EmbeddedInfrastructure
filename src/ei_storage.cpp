@@ -43,17 +43,21 @@ Storage::Storage()
 
 /*---------------    PUBLIC: START THE CHOOSEN FILE SYSTEM   ---------------*/
 
-bool Storage::startFileSystem()
+bool Storage::startup()
 {
 #ifdef SYSTEM_USES_LITTLEFS
-    return startLittleFS();
-
+  bool ok = startLittleFS();
 #elif defined(SYSTEM_USES_SD)
-    return startSD(SD_CS_PIN);
-
+  bool ok = startSD(SD_CS_PIN);
 #else
-    #error "No storage medium selected in myConfig.h"
+  #error "No storage medium selected in myConfig.h"
 #endif
+  if (!ok) return false;
+  if (_fs == nullptr) {
+    logError(FN, LN, "Storage startup succeeded but _fs was not initialized.");
+    return false;
+  }
+  return true;
 }
 
 /*---------------    START SD FILE SYSTEM   ---------------*/
@@ -61,11 +65,11 @@ bool Storage::startFileSystem()
 #ifdef SYSTEM_USES_SD
 
 bool Storage::startSD(int cspin) {
-  storage.logInfo("IN startFileSystem().");
+  logInfo(FN, LN, "Setting up the SD file system.");
 
   // 1. Mount the physical SD Card hardware partition
   if(!SD.begin(cspin)){                                                                     // start the SD system
-    storage.logError("Card Mount Failed.");
+    logError(FN, LN, "Card Mount Failed.");
     return false;                                                                           // and exit the function
   }
   _fs = &SD;
@@ -86,14 +90,15 @@ bool Storage::startSD(int cspin) {
       break;
     default: s = "SD Card Type: UNKNOWN.";
   }
-  storage.logInfo(s);
+  _state.mounted = true;
+  logInfo(FN, LN, s);
   StorageInfo info;
   getInfo(info);
   int cardSize = (int)(SD.cardSize() / (1024 * 1024));                                      // get the size of the SD card
-  storage.logInfo("SD Card Size: " + String(cardSize) + " MB.");
-  storage.logInfo("Total space: " + String(info.totalBytes / (1024 * 1024)) + " MB.");
-  storage.logInfo("Used space:  " + String(info.usedBytes  / (1024 * 1024)) + " MB.");
-  storage.logInfo(String(info.freeBytes  / (1024 * 1024)) + " MB.");
+  logInfo(FN, LN, "SD Card Size: " + String(cardSize) + " MB.");
+  logInfo(FN, LN, "Total space: " + String(info.totalBytes / (1024 * 1024)) + " MB.");
+  logInfo(FN, LN, "Used space:  " + String(info.usedBytes  / (1024 * 1024)) + " MB.");
+  logInfo(FN, LN, String(info.freeBytes  / (1024 * 1024)) + " MB.");
 
   return true;
 }
@@ -105,13 +110,15 @@ bool Storage::startSD(int cspin) {
 #ifdef SYSTEM_USES_LITTLEFS
 
 bool Storage::startLittleFS() {
-  storage.logInfo("Setting up the LittleFS file system.");
+  logInfo(FN, LN, "Setting up the LittleFS file system.");
 
   // 1. Mount the physical hardware partition map
   if(!LittleFS.begin(FORMAT_LITTLEFS_IF_FAILED)) {               // load LittleFS
-    storage.logInfo("LittleFS Mount Failed\n");                 // log this
+    logInfo(FN, LN, "LittleFS Mount Failed\n");                 // log this
     return false;                                                // and exit the function
   }
+  _state.mounted = true;
+  _fs = &LittleFS;
   refreshStats();
 
   // 2. Perform flash partition space diagnostics safely
@@ -122,13 +129,13 @@ bool Storage::startLittleFS() {
   float freeKB  = totalKB - usedKB;
 
   // You can now safely print or save these variables anywhere!
-  storage.logInfo("LittleFS Total Space: " + String(totalKB, 1) + " KB");
-  storage.logInfo("LittleFS Used Space:  " + String(usedKB, 1) + " KB");
-  storage.logInfo("LittleFS Free Space:  " + String(freeKB, 1) + " KB");
+  logInfo(FN, LN, "LittleFS Total Space: " + String(totalKB, 1) + " KB");
+  logInfo(FN, LN, "LittleFS Used Space:  " + String(usedKB, 1) + " KB");
+  logInfo(FN, LN, "LittleFS Free Space:  " + String(freeKB, 1) + " KB");
 
   // Low space safety check
   if (freeKB < 10.0) {
-    storage.logInfo("WARNING: Low disk space! Less than 10 KB remaining.");
+    logInfo(FN, LN, "WARNING: Low disk space! Less than 10 KB remaining.");
   }
 
   return true;
@@ -145,7 +152,7 @@ void Storage::dirReport(const char *dirname, uint8_t levels) {
     report += "================\n";
     buildDirReport(report, dirname, levels);
     report += "\nEnd of Report\n";
-  storage.logInfo(report);
+  logInfo(FN, LN, report);
 }
 
 /*---------------  RECURSIVILY BUILD A FORMATTED DIRECTORY REPORT  ---------------*/
@@ -241,32 +248,32 @@ bool Storage::createDir(const char * path) {
 /*---------------  DELETE DIRECTORY  ---------------*/
 
 void Storage::removeDir(const char * path) {
-  storage.logInfo("Removing Dir: " + String(path));
+  logInfo(FN, LN, "Removing Dir: " + String(path));
   if (_fs->mkdir(path)) {
     refreshStats();
-    storage.logInfo("Dir removed");
+    logInfo(FN, LN, "Dir removed");
   } else {
-    storage.logInfo("rmdir failed");
+    logInfo(FN, LN, "rmdir failed");
   }
 }
 
 /*---------------  MY READ FILE  ID  ---------------*/
 
 String Storage::readFile(const char * path, bool logFile) {
- if (!logFile) storage.logInfo("Reading file: " + String(path));                         // if debugging log the file path
+ if (!logFile) logInfo(FN, LN, "Reading file: " + String(path));                         // if debugging log the file path
  String s = "";                                                                              // create an empty string
  
  // ---> CHANGE: Use the internal class pointer arrow instead of 'fs.'
  File file = _fs->open(path, FILE_READ);                                                       // open the file
  
  if (!file) {                                                                                // if the file was not opened
-   storage.logError("ERROR 100: Failed to open file '" + String(path) + "' for reading");      // log the error
+   logError(FN, LN, "ERROR 100: Failed to open file '" + String(path) + "' for reading");      // log the error
    return "ERROR 100: Failed to open file '" + String(path) + "' for reading";                // and return the error to the calling function
  }
  
  int fSize = file.available();
  if (false) {                                                                                // if debugging
-   storage.logInfo(String(path) + ": Available bytes to be read are: " + String(fSize)); // log the bytes available to be read
+   logInfo(FN, LN, String(path) + ": Available bytes to be read are: " + String(fSize)); // log the bytes available to be read
  }
  
  char c;                                                                                     // declar a char 'c'
@@ -277,7 +284,7 @@ String Storage::readFile(const char * path, bool logFile) {
  file.close();                                                                               // close the file
  
  if (logFile) {
-   storage.logInfo("Reading file: " + String(path) + + ", contents: " + s);              // log the file path and file contents
+   logInfo(FN, LN, "Reading file: " + String(path) + + ", contents: " + s);              // log the file path and file contents
  }
  return s;                                                                                   // return 's' to the calling function
 }
@@ -287,11 +294,11 @@ String Storage::readFile(const char * path, bool logFile) {
 size_t Storage::load_data(File f, uint8_t *buffer, size_t maxLen, size_t index) {
   if (f.available()) {
     // FIXED: Log output moved ABOVE the return statement so it actually executes!
-    storage.logInfo("Reading file:'" + String(f.name()) + "' maxLen ='" + String(maxLen) + "'");  // log that the file was read from
+    logInfo(FN, LN, "Reading file:'" + String(f.name()) + "' maxLen ='" + String(maxLen) + "'");  // log that the file was read from
     return f.read(buffer, maxLen);                                                                // read maxLen bytes from the file 'f'
   } else {                                                                                        // else, there must be no bytes left in the file to read
     web.setDownloadingFile(false);                                                                    // tell the server the download is complete
-    storage.logInfo("Web page file download '" + String(f.name()) + "' has completed.");          // log the read is complete
+    logInfo(FN, LN, "Web page file download '" + String(f.name()) + "' has completed.");          // log the read is complete
     f.close();                                                                                    // close the file
     return 0;                                                                                     // and return the length of the read...zero bytes
   }
@@ -300,24 +307,30 @@ size_t Storage::load_data(File f, uint8_t *buffer, size_t maxLen, size_t index) 
 
 /*---------------  WRITE FILE  IDS 122---------------*/
 
-int Storage::writeFile(const char * path, const char * message, int from) {
-  // ---> CHANGE: Use the internal class pointer arrow instead of 'fs.'
-  File file = _fs->open(path, FILE_WRITE);                                                        // open the file in a writing mode
-  if (!file) {                                                                                    // if the file failed to be opened
-    storage.logInfo(", Failed to open file '" + String(path) + "' for writing.");                 // log that  the file failed to open
-    return -1;                                                                                    // and return to the calling function
+Storage::WriteResult Storage::writeFile(const char * path, const char * message, int from) {
+  DUMP(path)
+  File file = _fs->open(path, FILE_WRITE);
+  if (!file) {
+    logError(FN, LN, "Failed to open file '" + String(path) +
+             "' for writing." + conv.fromStr(from));
+    return WriteResult::OpenFailed;
   }
-  int n = file.print(message);                                                                    // write the file capturing the number of bytes written
-  if (n == (String(message)).length()) {                                                          // if the number of bytes written differes from the size of the message being written
-    storage.logInfo(String(n) + " bytes written to '" + String(path));                            // log the number of bytes written to file 'path'
-  } else {                                                                                        // else no bytes were written so
-    storage.logInfo("Write failed to file '" + String(path) + "n = " + String(n));                // log the file failed to be written
+  int n = file.print(message);
+  size_t expected = strlen(message);
+  if (n != expected) {
+    logError(FN, LN, "Write failed to file '" + String(path) +
+             "'. Wrote " + String(n) + " of " + String(expected) +
+             " bytes." + conv.fromStr(from));
+    file.close();
+    refreshStats();
+    return WriteResult::WriteFailed;
   }
-  file.close();                                                                                   // close the file
+  logInfo(FN, LN, String(n) + " bytes written to '" + String(path) +
+          "'" + conv.fromStr(from));
+  file.close();
   refreshStats();
-  return n;
+  return WriteResult::Success;
 }
-
 /*---------------  CREATE FILE  ---------------*/
 
 bool Storage::createFile(const char * path, const char * message) {
@@ -327,9 +340,9 @@ bool Storage::createFile(const char * path, const char * message) {
   }
   int n = file.print(message);                                                    // write the file capturing the number of bytes written
   if (n) {                                                                        // if some bytes were wrtten
-    storage.logInfo(String(n) + " bytes written to '" + String(path) + "'");      // log the number of bytes written to file 'path'
+    logInfo(FN, LN, String(n) + " bytes written to '" + String(path) + "'");      // log the number of bytes written to file 'path'
   } else {                                                                        // else no bytes were written so
-    storage.logInfo("Write failed to file '" + String(path) + "'");               // log the file failed to be written
+    logInfo(FN, LN, "Write failed to file '" + String(path) + "'");               // log the file failed to be written
     file.close();                                                                 // close the file
     return false;
   }
@@ -347,12 +360,12 @@ return          the number of bytes written to the file
 int Storage::appendFile(const char * path, const char * message) {
   File file = _fs->open(path, FILE_APPEND);                                                               // open the 'path' file
   if (!file) {                                                                                            // if it failed to be opened
-    storage.logInfo("Failed to open file '" + String(path) + "' for appending.\n");                       // advise via the serial monitor
+    logInfo(FN, LN, "Failed to open file '" + String(path) + "' for appending.\n");                       // advise via the serial monitor
     return 0;                                                                                             // and return to the calling function
   }
   int n = file.print(message);                                                                            // append 'message' to the file
   if (n != strlen(message)) {                                                                             // if written bytes are zero
-    storage.logInfo("Append failed to file'" + String(strlen(message)) + "' bytes to '" + String(path));  // log this
+    logInfo(FN, LN, "Append failed to file'" + String(strlen(message)) + "' bytes to '" + String(path));  // log this
   }
   file.close();                                                                                           // close the file
   file.close();                                                                                           // close the file
@@ -364,10 +377,10 @@ int Storage::appendFile(const char * path, const char * message) {
 
 void Storage::renameFile(const char * path1, const char * path2) {
   if (_fs->rename(path1, path2)) {
-    storage.logInfo("File renamed");
+    logInfo(FN, LN, "File renamed");
     refreshStats();
   } else {
-    storage.logInfo("Rename failed");
+    logInfo(FN, LN, "Rename failed");
   }
 }
 
@@ -376,16 +389,16 @@ void Storage::renameFile(const char * path1, const char * path2) {
 void Storage::deleteFile(const char * path, int from) {
  
  if(_fs->exists(path) == 0) {
-   storage.logError("File delete failed.  The file '" + String(path) +
+   logError(FN, LN, "File delete failed.  The file '" + String(path) +
                     "' does not exist." + conv.fromStr(from));
    return;
  }
  if (_fs->remove(path)) {
-   storage.logInfo("File deleted '" + String(path) + "'");
+   logInfo(FN, LN, "File deleted '" + String(path) + "'");
    refreshStats();
    return;
  }
-  storage.logError("Delete failed '" + String(path) + conv.fromStr(from));
+  logError(FN, LN, "Delete failed '" + String(path) + conv.fromStr(from));
 }
 
 /*---------------  TEST FILE  ---------------*/
@@ -436,7 +449,7 @@ int Storage::getFileSize(const char * path) {
  int fSize = 0;
  File file = _fs->open(path);                                             // open the file 'path'
  if (!file) {                                                             // if it failed to be opened
-   storage.logError("Failed to open file '" + String(path) + "'.");      // log the failure
+   logError(FN, LN, "Failed to open file '" + String(path) + "'.");      // log the failure
    return -1;                                                             // and return a -1 the calling function
  }
  fSize = file.size();                                                     // get the size of the file
@@ -449,14 +462,14 @@ int Storage::getFileSize(const char * path) {
 
 bool Storage::createDirIfNotExist(String dirName) {
   if (!_fs->exists(dirName.c_str())) {                                                // if the 'dirname' does not exist
-    storage.logInfo("The directory '" + dirName + "' does not exist, creating it.");  // log the action
+    logInfo(FN, LN, "The directory '" + dirName + "' does not exist, creating it.");  // log the action
     bool result = createDir(dirName.c_str());                                         // and create the directory and return the success of this
     if(!result) {                                                                     // if the directory failed to be created then
-      storage.logError("ERROR: Failed to create the directory '" + dirName + "'");    // log the error
+      logError(FN, LN, "ERROR: Failed to create the directory '" + dirName + "'");    // log the error
     }
     return result;                                                                    // return the result
   } else {                                                                            // else
-    storage.logInfo("The directory '" + dirName + "' exists.");                      // log the status
+    logInfo(FN, LN, "The directory '" + dirName + "' exists.");                      // log the status
     refreshStats();
     return true;                                                                      // return true
   }
@@ -464,17 +477,18 @@ bool Storage::createDirIfNotExist(String dirName) {
 
 /*---------------    IF FILE DOES/DOES NOT EXIST ---------------*/
 
-int Storage::ensureFileExists(const String& fileName, const JsonDocument& doc, int from){
+Storage::EnsureFileResult Storage::ensureFileExists(const String& fileName, const JsonDocument& doc, int from){
   if (_fs->exists(fileName)) {
-    storage.logInfo("The file '" + fileName + "' exists." + conv.fromStr(from));
-    return FILE_ALREADY_EXISTS;
+    logInfo(FN, LN, "The file '" + fileName + "' exists." + conv.fromStr(from));
+    return EnsureFileResult::AlreadyExists;
   }
-  if (!writeJsonFile(fileName.c_str(), doc, from)) {
-    storage.logError("Failed to create file '" + fileName + "'" + conv.fromStr(from));
-    return FILE_ERROR;
+  WriteResult result = writeJsonFile(fileName.c_str(), doc, from);
+  if (result != WriteResult::Success) {
+    logError(FN, LN, "Failed to create file '" + fileName + "'" + conv.fromStr(from));
+    return EnsureFileResult::Error;
   }
-  storage.logInfo("Successfully created missing file '" + fileName + "'" + conv.fromStr(from));
-  return FILE_WAS_CREATED;
+  logInfo(FN, LN, "Successfully created missing file '" + fileName + "'" + conv.fromStr(from));
+  return EnsureFileResult::Created;
 }
 
 /*---------------  GET RAW FILESYSTEM REFERENCE  ---------------*/
@@ -499,7 +513,6 @@ void Storage::refreshStats() {
 #ifdef  SYSTEM_USES_LITTLEFS
 
 void Storage::refreshLittleFSStats() {
-    _stats.mounted   = true;
     _stats.totalBytes = LittleFS.totalBytes();
     _stats.usedBytes  = LittleFS.usedBytes();
     _stats.freeBytes  = _stats.totalBytes - _stats.usedBytes;
@@ -512,7 +525,6 @@ void Storage::refreshLittleFSStats() {
 #ifdef SYSTEM_USES_SD
 
 void Storage::refreshSDStats() {
-    _stats.mounted = true;
     _stats.totalBytes = SD.totalBytes();
     _stats.usedBytes  = SD.usedBytes();
     _stats.freeBytes  = _stats.totalBytes - _stats.usedBytes;
@@ -523,7 +535,6 @@ void Storage::refreshSDStats() {
 /*---------------  PUBLIC CALL TO GET DISK STATS  ---------------*/
 
 void Storage::getInfo(StorageInfo& info) const {
-    info.mounted    = _stats.mounted;
     info.totalBytes = _stats.totalBytes;
     info.usedBytes  = _stats.usedBytes;
     info.freeBytes  = _stats.freeBytes;
@@ -543,21 +554,37 @@ const char* Storage::fileSystemName() const {
 
 /*---------------  PUT THE RIGHT HEADERS INTO A STORAGE INFO LOG  ---------------*/
 
-void Storage::logInfo(const String& msg) {
-    logging.msg(WHOAMI, T::SYSLOG, L::INFO, ET::STORAGE, msg);
+void Storage::logInfo(const char* function,
+                      int lineNum,
+                      const String& msg)
+{
+    logging.msg(__FILE__,
+                function,
+                lineNum,
+                T::SYSLOG,
+                L::INFO,
+                ET::STORAGE,
+                msg);
 }
 
 /*---------------  PUT THE RIGHT HEADERS INTO A STORAGE ERROR LOG  ---------------*/
 
-void Storage::logError(const String& msg) {
-    logging.msg(WHOAMI, T::SYSLOG, L::ERROR, ET::STORAGE, msg);
+void Storage::logError(const char* function,
+                      int lineNum,
+                      const String& msg)
+{
+    logging.msg(__FILE__,
+                function,
+                lineNum,
+                T::SYSLOG,
+                L::ERROR,
+                ET::STORAGE,
+                msg);
 }
-
-
 
 /*-----  WRITE A JSON FILE TO DISK  -----*/
 
-int Storage::writeJsonFile(const char* path, const JsonDocument& doc, int from) {
+Storage::WriteResult Storage::writeJsonFile(const char* path, const JsonDocument& doc, int from) {
     String json;
     serializeJson(doc, json);
     return writeFile(path, json.c_str(), from);
@@ -569,7 +596,7 @@ bool Storage::readJsonFile(const char* path, JsonDocument& doc, int from) {
     String json = readFile(path, from);
     auto err = deserializeJson(doc, json);
   if (err) {
-    storage.logError("Unable to parse JSON file: " + String(path) + "Error = " + String(err.c_str()));
+    logError(FN, LN, "Unable to parse JSON file: " + String(path) + "Error = " + String(err.c_str()));
 //    logging.msg("Unable to parse JSON file '%s': %s", path, err.c_str());
     return false;
   }

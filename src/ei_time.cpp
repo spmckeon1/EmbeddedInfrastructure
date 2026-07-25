@@ -22,13 +22,18 @@ bool EiTime::setup() {
   JsonDocument doc;
   storage.ensureFileExists(_configFileName, createConfigJson(_config), LN);         // Create the configuration file with defaults if it doesn't exist.
   if (!storage.readJsonFile(_configFileName, doc, LN)) {                            // Read the configuration file.
-    eiTime.logError("Failed to read: " + String(_configFileName));
+    logError(FN, LN, "Failed to read: " + String(_configFileName));
     return false;
   }
   loadConfigFromJson(doc, _config);                                                 // Populate the working configuration.
   if (!validateConfiguration(_config)) {                                            // if validate fails then
     _config = TimeConfig{};                                                         // set it to the defauts
-    storage.writeJsonFile(_configFileName, createConfigJson(_config), LN);          // and write it to disk
+    Storage::WriteResult result = storage.writeJsonFile(_configFileName,            // try to write the data to a new file
+                                                        createConfigJson(_config),
+                                                        LN);
+    if(result != Storage::WriteResult::Success) {                                   // if this failed
+      return false;                                                                 // return false
+    };
   }
   return true;
 }
@@ -42,7 +47,7 @@ bool EiTime::begin() {
 
   lastAttempt = millis();
  if (timeStatus() != timeSet) {                               // STEP 1 - Wait for NTP synchronization.
-   eiTime.logInfo("Waiting for NTP synchronization...");
+   logInfo(FN, LN, "Waiting for NTP synchronization...");
     updateNTP();
     return false;
   }
@@ -65,10 +70,10 @@ bool EiTime::begin() {
         _state.ready = true;
         return true;
     }
-    eiTime.logError("Unable to resolve Olson timezone.");
+    logError(FN, LN, "Unable to resolve Olson timezone.");
     return false;
   }
-  eiTime.logError("No timezone configured. Using default.");   // STEP 4 - Final fallback.
+  logError(FN, LN, "No timezone configured. Using default.");   // STEP 4 - Final fallback.
   _tz.setPosix(_config.posixRule);
   _config.posixRule = _config.posixRule;
   _state.posixChanged = true;
@@ -99,12 +104,10 @@ bool EiTime::readConfigFromDisk() {
 
 /*-----  WRITE THE EITIME CONFIGURATION FILE  -----*/
 
-bool EiTime::writeConfigToDisk() {
+Storage::WriteResult EiTime::writeConfigToDisk() {
     JsonDocument doc;
-
     doc["olsonName"] = _config.olsonName;
     doc["posixRule"] = _config.posixRule;
-
     return storage.writeJsonFile(_configFileName, doc, LN);
 }
 
@@ -130,7 +133,7 @@ void EiTime::loadConfigFromJson(const JsonDocument& doc, TimeConfig& cfg) const 
 
 bool EiTime::validateConfiguration(const TimeConfig& cfg) {
   if (cfg.olsonName.isEmpty() || cfg.posixRule.isEmpty()) {
-    eiTime.logError("Failed to validate TimeConfig: "
+    logError(FN, LN, "Failed to validate TimeConfig: "
                     "cfg.posixRule: " + cfg.posixRule +
                     "cfg.olsonName: " + cfg.olsonName
                     );
@@ -141,14 +144,30 @@ bool EiTime::validateConfiguration(const TimeConfig& cfg) {
 
 /*-----  PUT THE RIGHT HEADERS INTO A LOG MSG  -----*/
 
-void EiTime::logInfo(const String& msg) {
-    logging.msg(WHOAMI, T::SYSLOG, L::INFO, ET::TIME, msg);
+void EiTime::logInfo(const char* function,
+                      int lineNum,
+                      const String& msg)
+{
+    logging.msg(__FILE__,
+                function,
+                lineNum,
+                T::SYSLOG,
+                L::INFO,
+                ET::TIME,
+                msg);
 }
 
 /*-----  PUT THE RIGHT HEADERS INTO A LOG MSG  -----*/
 
-void EiTime::logError(const String& msg) {
-    logging.msg(WHOAMI, T::SYSLOG, L::ERROR, ET::TIME, msg);
+void EiTime::logError(const char* function,
+                      int lineNum,
+                      const String& msg)
+{
+    logging.msg(__FILE__,
+                function,
+                lineNum,
+                T::SYSLOG,
+                L::ERROR,
+                ET::TIME,
+                msg);
 }
-
-

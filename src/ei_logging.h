@@ -83,6 +83,7 @@ namespace ET {          // Event Type / Category
     MQTT,
     WIFI,
     TIME,
+    LOGGING,
 
     GPS,            // Hardware
     ET_SERIAL,
@@ -122,29 +123,44 @@ namespace ET {          // Event Type / Category
   String toStr(Type type);
 }
 
-struct WhoAmI {                   // contains log msg file name, code line number, and function name
-    const char* file;
-    int line;
-    const char* function;
-};
-
-// allows the user to fill in the WhoAmI struct
-#define WHOAMI WhoAmI{__FILE__, \
-                      __LINE__, \
-                      __func__}
 
 class Logging {
 private:
   LogDestination _dest = LogDestination::RamBuffer;
-  String formatSerialLogEntry(const WhoAmI& whoAmI, const String& msg);
-  String formatJsonStrLogEntry(const WhoAmI& whoAmI, T::Type recordType, L::Level level, ET::Type eventType, const String& message);
+  String formatSerialLogEntry(const char* file,
+                              const char* function,
+                              int lineNum,
+                              const String& msg);
+  String formatJsonStrLogEntry(const char* file,
+                               const char* function,
+                               int lineNum,
+                               T::Type recordType,
+                               L::Level level,
+                               ET::Type eventType,
+                               const String& message);
   void sendToNodeRedLogging(String logEntry);
-  
+  void logInfo(const char* function,
+               int lineNum,
+               const String& msg);
+  void logError(const char* function,
+                int lineNum,
+                const String& msg);
+
 public:
 
-  void msg(const WhoAmI& whoAmI, T::Type recordType, L::Level level, ET::Type eventType, const String& message);
+  void msg(
+           const char* file,
+           const char* function,
+           int lineNum,
+           T::Type recordType,
+           L::Level level,
+           ET::Type eventType,
+           const String& message
+           );
   String dividerStr(const String& function, int line);
+  void startup();
   void setDestination(LogDestination destination);
+
 };
 
 extern Logging logging;

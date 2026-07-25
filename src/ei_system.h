@@ -1,23 +1,13 @@
 #pragma once
 
-// -----------------------------------------------------------------------------
-// EmbeddedInfrastructure
-//
-// Module:
-//     System
-//
-// Owns:
-//
-//     - System information
-//     - Restart and reset
-//     - Heap and memory information
-//     - ESP32 diagnostics
-//
-// Does NOT own:
-//
-//     - Device configuration
-//     - Logging
-//
-// -----------------------------------------------------------------------------
-
 #include <ei_types.h>
+
+class EiSystem {
+public:
+  bool setup();
+  bool startup();
+private:
+  void loop();
+};
+
+extern EiSystem eiSystem;

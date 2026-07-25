@@ -6,9 +6,6 @@
 //
 
 #include <Arduino.h>
-#include <WiFi.h>
-#include <WiFiManager.h>  // 💡 Fixes: 'WiFiManager' / 'wm' was not declared in this scope
-#include <esp_wifi.h>
 #include <ei_conversion.h>
 #include <ei_logging.h>
 #include <ei_storage.h>
@@ -16,93 +13,122 @@
 
 EiNetwork network;
 
+/*-----  SETUP THE NETWORK SUBSYSTEM  -----*/
+
+                            
+                            // Prepare the Network subsystem for startup.
+bool EiNetwork::setup()     // This phase may not depend on services provided by other subsystems.
+{
+  _configFileName = appDirs.configDir + "/ei_networkCfg.json";
+  return checkHardware();
+}
+
 /*-------------------------  STARTUP NETWORK SUBSYSTEM  -------------------------*/
 
 bool EiNetwork::startup() {
-  logInfo("Starting Network subsystem");
+  logInfo(FN, LN, "Initializing Network infrastructure...");
+
+  storage.ensureFileExists(_configFileName, createConfigJson(_config), LN);
+
+  if (!readConfigFromDisk()) {
+    logError(FN, LN, "Unable to load disk config layout");
+    return false;
+  }
+
+  // Run the validation check for log insights, but do not exit on failure
+  if (!validateConfiguration()) {
+    logError(FN, LN, "Network config file is currently empty or unprovisioned.");
+  }
+
   WiFi.onEvent([this](WiFiEvent_t event, WiFiEventInfo_t info) {
-      this->aWiFiEvent(event);
-  });
+      this->onWifiGotIP(info);
+  }, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_GOT_IP);
 
+  WiFi.onEvent([this](WiFiEvent_t event, WiFiEventInfo_t info) {
+      this->onWifiDisconnect(info);
+  }, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
 
-//  WiFi.onEvent(network.aWiFiEvent);                                   // Register WiFi event callbacks
-  if (!checkHardware()) {                                     // Verify WiFi hardware is available
-    logError("WiFi hardware not detected");
-    return false;
-  }
-  if (!readConfigFromDisk()) {                                 // Load network configuration
-    logError("Unable to load network configuration");
-    return false;
-  }
-  if (!validateConfiguration()) {                             // Validate configuration
-    logError("Invalid network configuration");
-    return false;
-  }
-  network.logInfo("Network subsystem ready");
+  logInfo(FN, LN, "Network infrastructure initialized and idle.");
   return true;
+}
+
+/*-------------------------  NETWORK EVENT LOOP  -------------------------*/
+
+bool EiNetwork::evtLoop() {
+  wm.process();
+  return false;
 }
 
 /*---------------  USED ON BOOT TO CONNECT TO THE NET  ---------------*/
 
 bool EiNetwork::connect(String& ssid, String& pwd, int from) {
-  network.logInfo("Connecting to SSID " + ssid + ", Length = " + String(ssid.length()) + conv.fromStr(from));
-  
-  // 1. CRITICAL ESP32-C3 PATRICK: Cap radio TX power to completely eliminate brownout crashes
+  logInfo(FN, LN, "Initiating network connection for SSID: " + ssid + conv.fromStr(from));
   WiFi.mode(WIFI_STA);
-  esp_wifi_set_max_tx_power(WIFI_POWER_8_5dBm);
-  
-  // 2. Initialize WiFiManager
-  WiFiManager wm;
-  
-  // If the credentials are empty or the router connection fails, wait 3 minutes (180s)
-  // for a user to connect to the AP portal before timing out and trying again.
-  wm.setConfigPortalTimeout(180);
-  
-  // Make the configuration page look like your sleek dark mode theme
-  wm.setClass("invert");
-  wm.setCustomHeadElement("<style>.c{background-color:#1a1a1a;} body{background-color:#121212; color:#ffffff;} button,input[type='submit']{background-color:#337ab7; color:white;}</style>");
-  
-  // 3. Fire the automated connection and fallback routine
-  // Pass your custom Access Point name from your existing constant data pointer
-  network.logInfo("Handing connection control to the automated WiFiManager pipeline..." + conv.fromStr(from));
-  bool success = wm.autoConnect(appConsts.accessPtName.c_str());
+  esp_wifi_set_max_tx_power(WIFI_POWER_8_5dBm);                   // Cap radio TX power to prevent brownout hardware resets
+  initAsyncPortal(appConsts.accessPtName.c_str());                // This triggers wm.autoConnect() in async mode and returns instantly
+  return true;                                                    // return true because our background loop (evtLoop) will safely handle checking if connection succeeds or times out
+}
 
-  if (!success) {
-    network.logInfo("Failed to connect to SSID " + ssid + " and portal timed out. Initializing AP fallback state." + conv.fromStr(from));
-    
-    // Set your existing global status track variables exactly like your old code did
-    WiFi.mode(WIFI_AP);
-    WiFi.softAP(appConsts.accessPtName);
-    _state.accessPtIP = WiFi.softAPIP().toString();
- //   _state.srvIPAddr = accessPtIP;
-    _state.connectedSSID = "accessPt";
-    _state.apCreatedTime = millis();
-    
-    network.logInfo("Access point name: " + appConsts.accessPtName + conv.fromStr(from));
-    network.logInfo("AP IP address: " + _state.accessPtIP + conv.fromStr(from));
-    logging.dividerStr(FN, LN);
-    return false;
-  }
-  
-  // 4. Connection Success! Update your global variables cleanly
-  _state.connectedSSID = WiFi.SSID();
+/*---------------  USE TE WIFI TO TO ENSURE wm.autoConnect IS NOT BLOCKING  ---------------*/
+
+void EiNetwork::initAsyncPortal(const char* apName) {
+  wm.setConfigPortalBlocking(false);                                                        // 1. Prevent WiFiManager from halting your loop
+  wm.setConnectTimeout(15);                                                                 // 2. Set how long it tries connecting to the router before opening the portal
+  wm.setConfigPortalTimeout(180);                                                           // 3. Set how long the portal stays open before automatically closing (3 minutes)
+  wm.setClass("invert");                                                                    // 4. Custom Styling
+  wm.setCustomHeadElement("<style>body{background-color:#121212; color:#ffffff;}</style>");
+  wm.autoConnect(apName);                                                                   // 5. Fire off the background connection/portal attempt, This returns instantly instead of waiting for a connection
+}
+
+/*---------------  EVENT HANDLER: OBTAINED NETWORK IP  ---------------*/
+
+void EiNetwork::onWifiGotIP(WiFiEventInfo_t info) {
   _state.ipAddress = WiFi.localIP().toString();
+  _state.connectedSSID = WiFi.SSID();
   
-  network.logInfo("WiFi Connection SUCCESSFUL! IP: " + _state.ipAddress  + conv.fromStr(from));
+  logInfo(FN, LN, "Event 7: Network connection verified. Active IP: " + _state.ipAddress);
+  // ACTIONS TO TAKE WHEN WIFI IS UP
+}
+
+/*---------------  EVENT HANDLER: ROUTER DISCONNECTED  ---------------*/
+
+void EiNetwork::onWifiDisconnect(WiFiEventInfo_t info) {
+  uint8_t reason = info.wifi_sta_disconnected.reason;
+  _state.ipAddress = "";
+  _state.connectedSSID = "";
   
-  return true;
+  logError(FN, LN, "Event 5: Router connection lost. Reason code: " + String(reason));
+  // ACTIONS TO TAKE WHEN WIFI IS UP
 }
 
 /*---------------  PUT THE RIGHT HEADERS INTO A NETWORK INFO LOG  ---------------*/
 
-void EiNetwork::logInfo(const String& msg) {
-    logging.msg(WHOAMI, T::SYSLOG, L::INFO, ET::NETWORK, msg);
+void EiNetwork::logInfo(const char* function,
+                      int lineNum,
+                      const String& msg)
+{
+    logging.msg(__FILE__,
+                function,
+                lineNum,
+                T::SYSLOG,
+                L::INFO,
+                ET::NETWORK,
+                msg);
 }
 
 /*---------------  PUT THE RIGHT HEADERS INTO A NETWORK ERROR LOG  ---------------*/
 
-void EiNetwork::logError(const String& msg) {
-    logging.msg(WHOAMI, T::SYSLOG, L::ERROR, ET::NETWORK, msg);
+void EiNetwork::logError(const char* function,
+                      int lineNum,
+                      const String& msg)
+{
+    logging.msg(__FILE__,
+                function,
+                lineNum,
+                T::SYSLOG,
+                L::ERROR,
+                ET::NETWORK,
+                msg);
 }
 
 /*
@@ -225,14 +251,14 @@ void EiNetwork::aWiFiEvent(WiFiEvent_t event) {
       break;
     default: response += "Received an unknown WiFi event.";
   }
-    network.logInfo(response);
+    logInfo(FN, LN, response);
 }
 
 /*-------------------------  LOAD NET CREDENTIALS FROM DISK  -------------------------*/
 
 bool EiNetwork::readConfigFromDisk() {
   JsonDocument doc;
-  if (!storage.readJsonFile(_configFileName, doc, LN))
+  if (!storage.readJsonFile(_configFileName.c_str(), doc, LN))
     return false;
   _config.ssid = doc["ssid"] | _config.ssid;
   _config.password = doc["password"] | _config.password;
@@ -248,45 +274,37 @@ JsonDocument EiNetwork::createConfigJson(const NetworkCredentials& cfg) const {
     return doc;
 }
 
-  /*-----  BOOT UP WIFI HARDWARE CHECK  -----*/
+/*-----  BOOT UP WIFI HARDWARE CHECK  -----*/
 
-  bool EiNetwork::checkHardware() {
-      // 1. Verify that the underlying ESP-IDF Wi-Fi driver is initialized.
-      // If it isn't init yet, we attempt to set a basic mode to trigger it.
-      WiFi.mode(WIFI_STA);
-      
-      wifi_mode_t currentMode;
-      esp_err_t err = esp_wifi_get_mode(&currentMode);
-      
-      if (err == ESP_ERR_WIFI_NOT_INIT) {
-        logError("Wi-Fi hardware driver failed to initialize.");
-          return false;
-      }
-      
-      // 2. Query the physical Wi-Fi radio's burnt-in MAC address.
-      // If the radio hardware is faulty or unreadable, this returns an empty or zeroed string.
-      String mac = WiFi.macAddress();
-      if (mac == "00:00:00:00:00:00" || mac.length() == 0) {
-        logError("Wi-Fi hardware check failed: Invalid MAC address.");
-          return false;
-      }
-      
-    network.logInfo("Wi-Fi hardware is verified and ready. MAC: " + mac);
-      return true;
+bool EiNetwork::checkHardware() {
+  WiFi.mode(WIFI_STA);                                                  // 1. Verify that the underlying ESP-IDF Wi-Fi driver is initialized.
+  wifi_mode_t currentMode;
+  esp_err_t err = esp_wifi_get_mode(&currentMode);                      // If it isn't init yet, we attempt to set a basic mode to trigger it.
+  if (err == ESP_ERR_WIFI_NOT_INIT) {
+    logError(FN, LN, "Wi-Fi hardware driver failed to initialize.");
+      return false;
   }
+  String mac = WiFi.macAddress();                                         // 2. Query the physical Wi-Fi radio's burnt-in MAC address.
+  if (mac == "00:00:00:00:00:00" || mac.length() == 0) {                  // If the radio hardware is faulty or unreadable, this returns an empty or zeroed string.
+    logError(FN, LN, "Wi-Fi hardware check failed: Invalid MAC address.");
+      return false;
+  }
+  logInfo(FN, LN, "Wi-Fi hardware is verified and ready. MAC: " + mac);
+  return true;
+}
 
   /*-----  VALIDATE THE WIFI CONFIGURATION  -----*/
 
   bool EiNetwork::validateConfiguration() {
       if (_config.ssid.isEmpty()) {
-        logError("Network SSID is not configured.");
+        logError(FN, LN, "Network SSID is not configured.");
           return false;
       }
       // WPA2 passwords must be at least 8 characters.
       // Allow empty passwords in case the user intentionally connects
       // to an open network.
       if (!_config.password.isEmpty() && _config.password.length() < 8) {
-        logError("Wi-Fi password must be at least 8 characters.");
+        logError(FN, LN, "Wi-Fi password must be at least 8 characters.");
         return false;
       }
 

@@ -24,7 +24,7 @@
 #include <ArduinoJson.h>
 #include <ezTime.h>
 #include <ei_types.h>
-#include <ei_configuration.h>
+#include <ei_storage.h>
 
 struct TimeConfig {       // Default to U.S. Mountain Time. Applications may override as needed.
     String olsonName = "America/Denver";
@@ -50,12 +50,16 @@ private:
   bool eventLoop();
   bool setup();
   bool readConfigFromDisk();
-  bool writeConfigToDisk();
+  Storage::WriteResult writeConfigToDisk();
   JsonDocument createConfigJson(const TimeConfig& cfg) const;
   void loadConfigFromJson(const JsonDocument& doc, TimeConfig& cfg) const;
   bool validateConfiguration(const TimeConfig& cfg);
-  void logInfo(const String& msg);
-  void logError(const String& msg);
+  void logInfo(const char* function,
+               int lineNum,
+               const String& msg);
+  void logError(const char* function,
+                int lineNum,
+                const String& msg);
 
 public:
   bool begin();

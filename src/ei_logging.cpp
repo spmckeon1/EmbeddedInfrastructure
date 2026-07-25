@@ -8,26 +8,55 @@
 
 Logging logging;
 
+/*-----  STARTUP THE LOGGING SERVICE  -----*/
+
+void Logging::startup() {
+  Serial.begin(115200);                                                         // set the serial port speed
+  dividerStr(FN, LN);
+  dividerStr(FN, LN);
+  logInfo(FN, LN, "Starting boot process." );
+  logInfo(FN, LN, "Serial started at 115200");
+  logInfo(FN, LN, "Starting the Logging service");
+}
+
 /*-----  FORMAT LOG ENTRY FOR THE SERIAL MONITOR  -----*/
    
-String Logging::formatSerialLogEntry(const WhoAmI& whoAmI, const String& msg) {
-  return eiTime.getLogTimeStamp()+                     //return the log entry
-         ", Line#:" + String(whoAmI.line)
-         + ", FROM: " + whoAmI.function +
-         ": " + msg;
+String Logging::formatSerialLogEntry(const char* file,
+                                     const char* function,
+                                     int lineNum,
+                                     const String& msg)
+{
+  return eiTime.getLogTimeStamp()
+      + ", "
+      + file
+      + ":"
+      + String(lineNum)
+      + ", "
+      + function
+      + "(): "
+      + msg
+   ;
 }
 
 /*-----  FORMAT LOG ENTRY AS JSON STRING  -----*/
 
-String Logging::formatJsonStrLogEntry(const WhoAmI& whoAmI, T::Type recordType, L::Level level, ET::Type eventType, const String& message) {
+String Logging::formatJsonStrLogEntry(const char* file,
+                                      const char* function,
+                                      int lineNum,
+                                      T::Type recordType,
+                                      L::Level level,
+                                      ET::Type eventType,
+                                      const String& message)
+{
   static uint32_t devSeq = 1;
   JsonDocument doc;
 
   doc["deviceSequence"] = devSeq++;
   doc["eventTime"]      = eiTime.getLogTimeStamp();
   doc["component"]      = appConsts.appShortName;
-  doc["function"]       = whoAmI.function;
-  doc["line"]           = whoAmI.line;
+  doc["file"]           = file;
+  doc["function"]       = function;
+  doc["line"]           = lineNum;
   doc["recordType"]     = T::toStr(recordType);
   doc["level"]          = L::toStr(level);
   doc["eventType"]      = ET::toStr(eventType);
@@ -35,13 +64,28 @@ String Logging::formatJsonStrLogEntry(const WhoAmI& whoAmI, T::Type recordType, 
 
   return conv.jsonObjToJsonStr(doc);
 }
-/*-----  CUSTOMIZED SERIAL.PRINT  -----*/     // Return the canonical timestamp for log records.
-                                              // Before time synchronization this is milliseconds since boot.
-                                              // After synchronization it becomes the configured date/time format.
+/*-----  PRINT THE LOG MSG TO SERIAL AND SEND IT TO sendToNodeRedLogging()  -----*/
 
-void Logging::msg(const WhoAmI& whoAmI, T::Type recordType, L::Level level, ET::Type eventType, const String& message) {
-  Serial.print(formatSerialLogEntry(whoAmI, message));
-  sendToNodeRedLogging(formatJsonStrLogEntry(whoAmI, recordType, level, eventType, message));
+void Logging::msg(
+    const char* file,
+    const char* function,
+    int lineNum,
+    T::Type recordType,
+    L::Level level,
+    ET::Type eventType,
+    const String& message)
+{
+  Serial.println(formatSerialLogEntry(file,
+                                    function,
+                                    lineNum,
+                                    message));
+  sendToNodeRedLogging(formatJsonStrLogEntry(file,
+                                             function,
+                                             lineNum,
+                                             recordType,
+                                             level,
+                                             eventType,
+                                             message));
 }
 
 /*-----  WRITE TO SYSLOG  -----*/
@@ -113,4 +157,34 @@ String ET::toStr(Type type) {
 
 void Logging::setDestination(LogDestination destination) {
     _dest = destination;
+}
+
+/*---------------  PUT THE RIGHT HEADERS INTO A STORAGE INFO LOG  ---------------*/
+
+void Logging::logInfo(const char* function,
+                      int lineNum,
+                      const String& msg)
+{
+    logging.msg(__FILE__,
+                function,
+                lineNum,
+                T::SYSLOG,
+                L::INFO,
+                ET::LOGGING,
+                msg);
+}
+
+/*---------------  PUT THE RIGHT HEADERS INTO A STORAGE ERROR LOG  ---------------*/
+
+void Logging::logError(const char* function,
+                      int lineNum,
+                      const String& msg)
+{
+    logging.msg(__FILE__,
+                function,
+                lineNum,
+                T::SYSLOG,
+                L::ERROR,
+                ET::LOGGING,
+                msg);
 }
