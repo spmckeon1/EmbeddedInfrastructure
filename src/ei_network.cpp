@@ -6,10 +6,22 @@
 //
 
 #include <Arduino.h>
+#include <ei_appPolicy.h>
+#include <ei_scheduler.h>
 #include <ei_conversion.h>
 #include <ei_logging.h>
 #include <ei_storage.h>
 #include <ei_network.h>
+
+/*-----  CLASS CONSTRUCTOR  -----*/
+// This wires your custom log bridge directly into WiFiManager before boot
+EiNetwork::EiNetwork()
+  : wmLoggerBridge(),
+    wm(wmLoggerBridge)
+{
+    _configFileName = "/network_cfg.json";
+}
+
 
 EiNetwork network;
 
@@ -19,6 +31,8 @@ EiNetwork network;
                             // Prepare the Network subsystem for startup.
 bool EiNetwork::setup()     // This phase may not depend on services provided by other subsystems.
 {
+  wm.setDebugOutput(true);
+  wm.setSaveConfigCallback(EiNetwork::saveConfigCallback);
   _configFileName = appDirs.configDir + "/ei_networkCfg.json";
   return checkHardware();
 }
@@ -47,16 +61,34 @@ bool EiNetwork::startup() {
   WiFi.onEvent([this](WiFiEvent_t event, WiFiEventInfo_t info) {
       this->onWifiDisconnect(info);
   }, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
+  
+  // 💡 FIXED: Seed WiFiManager with pre-saved credentials if they exist
+   if (_config.ssid.length() > 0) {
+       WiFi.begin(_config.ssid.c_str(), _config.password.length() > 0 ? _config.password.c_str() : NULL);
+   }
 
-  logInfo(FN, LN, "Network infrastructure initialized and idle.");
+   // 💡 FIXED: Call autoConnect using exactly 1 or 2 correct arguments
+   logInfo(FN, LN, "Attempting connection via WiFiManager...");
+   if (!wm.autoConnect("EiNetwork_AP")) {
+       logError(FN, LN, "WiFiManager failed to connect or hit portal timeout.");
+       return false;
+   }
+
+   _state.connectedSSID = wm.getWiFiSSID();
+   _state.ipAddress = WiFi.localIP().toString();
+  logInfo(FN, LN, "Network infrastructure started and background processes running.");
   return true;
 }
 
 /*-------------------------  NETWORK EVENT LOOP  -------------------------*/
 
 bool EiNetwork::evtLoop() {
-  wm.process();
-  return false;
+  static RunTime cfgWriteTimer = {IntervalType::IT_SECOND, 1, -1}; // declare the RunTime struct
+  if(scheduler.isTimeToRun(cfgWriteTimer) && _config.dirty) {      // if it is time to run a _config.dirty check and _config.dirty is dirty then
+    writeConfigToDisk();                                        // write the new _config to dsk.
+  }
+    wm.process();
+    return true;
 }
 
 /*---------------  USED ON BOOT TO CONNECT TO THE NET  ---------------*/
@@ -65,7 +97,7 @@ bool EiNetwork::connect(String& ssid, String& pwd, int from) {
   logInfo(FN, LN, "Initiating network connection for SSID: " + ssid + conv.fromStr(from));
   WiFi.mode(WIFI_STA);
   esp_wifi_set_max_tx_power(WIFI_POWER_8_5dBm);                   // Cap radio TX power to prevent brownout hardware resets
-  initAsyncPortal(appConsts.accessPtName.c_str());                // This triggers wm.autoConnect() in async mode and returns instantly
+  initAsyncPortal(appIDs.accessPointName);                        // This triggers wm.autoConnect() in async mode and returns instantly
   return true;                                                    // return true because our background loop (evtLoop) will safely handle checking if connection succeeds or times out
 }
 
@@ -86,6 +118,11 @@ void EiNetwork::onWifiGotIP(WiFiEventInfo_t info) {
   _state.ipAddress = WiFi.localIP().toString();
   _state.connectedSSID = WiFi.SSID();
   
+  if (_config.ssid.isEmpty() || _config.password.isEmpty()) {
+    _config.ssid = WiFi.SSID();
+    _config.password = WiFi.psk(); // Pulls the cached network key/passphrase
+    _config.dirty = true;
+  }
   logInfo(FN, LN, "Event 7: Network connection verified. Active IP: " + _state.ipAddress);
   // ACTIONS TO TAKE WHEN WIFI IS UP
 }
@@ -260,9 +297,22 @@ bool EiNetwork::readConfigFromDisk() {
   JsonDocument doc;
   if (!storage.readJsonFile(_configFileName.c_str(), doc, LN))
     return false;
-  _config.ssid = doc["ssid"] | _config.ssid;
-  _config.password = doc["password"] | _config.password;
+  _config.ssid     = doc["ssid"].as<String>();
+  _config.password = doc["password"].as<String>();
   return true;
+}
+
+/*-------------------------  WRITE THE _config SSID AND PWD TO DISK  -------------------------*/
+
+Storage::WriteResult EiNetwork::writeConfigToDisk() {
+    JsonDocument doc;
+    doc["ssid"]     = _config.ssid;
+    doc["password"] = _config.password;
+
+  Storage::WriteResult result =  storage.writeJsonFile(_configFileName.c_str(), doc, LN);
+  if(result == Storage::WriteResult::Success) {
+    _config.dirty = false;
+  }
 }
 
 /*-----  CREATE THE CONFIG JSON OBJECT FROM THE cfg CONTENTS  -----*/
@@ -310,3 +360,27 @@ bool EiNetwork::checkHardware() {
 
       return true;
   }
+
+
+void EiNetwork::saveConfigCallback() {
+    // 1. Log that the user submitted data
+    network.logInfo(__FUNCTION__, __LINE__, "New Wi-Fi credentials submitted via portal!");
+
+    // 2. Fetch the newly entered credentials from WiFiManager and update _config
+    network._config.ssid = network.wm.getWiFiSSID();
+    network._config.password = network.wm.getWiFiPass();
+    network._config.dirty = true;
+
+    // 3. Generate your updated configuration JSON string
+    JsonDocument doc = network.createConfigJson(network._config);
+    String jsonStr;
+    serializeJson(doc, jsonStr);
+
+    // 4. Overwrite your file on disk using your existing storage system layout
+  Storage::WriteResult result = storage.writeFile(network._configFileName.c_str(), jsonStr.c_str(), LN);
+  if (result == Storage::WriteResult::Success) {
+        network.logInfo(__FUNCTION__, __LINE__, "Successfully saved new network credentials to disk.");
+    } else {
+        network.logError(__FUNCTION__, __LINE__, "Failed writing new credentials to disk.");
+    }
+}

@@ -12,30 +12,100 @@
 #include <esp_wifi.h>
 #include <ei_types.h>
 
+class Logging; // Tells the compiler that the Logging class exists elsewhere
+
 struct NetworkCredentials {
     bool dirty = false;
     String ssid = "";
     String password = "";
 };
 
+struct StationState
+{
+    bool   connected = false;
+    String ssid;
+    String ipAddress;
+};
+
+struct AccessPointState
+{
+    bool   active = false;
+    String ipAddress;
+    uint32_t createdTime = 0;
+};
+
+struct NetworkState
+{
+    StationState     sta;
+    AccessPointState ap;
+};
+
+/*
 struct NetworkState {
     String connectedSSID;
     String ipAddress;                 // Current active IP
     String accessPtIP;                // IP when acting as an AP
     unsigned long apCreatedTime = 0;
 };
+*/
+
+// 1. The custom stream bridge that intercepts character arrays
+class WiFiManagerLogBridge : public Print {
+private:
+    String buffer;
+public:
+    WiFiManagerLogBridge() { buffer.reserve(128); }
+
+    size_t write(uint8_t c) override {
+        if (c == '\n') {
+            flushBuffer();
+        } else if (c != '\r') {
+            buffer += (char)c;
+        }
+        return 1;
+    }
+
+    size_t write(const uint8_t *buffer, size_t size) override {
+        size_t n = 0;
+        while (size--) { n += write(*buffer++); }
+        return n;
+    }
+
+private:
+    void flushBuffer() {
+        if (buffer.length() > 0) {
+          buffer.trim();
+          // Routes directly to your custom logging class setup
+          logging.msg(
+                       "WiFiManager.h",
+                       "autoConnect",
+                       0,
+                       T::SYSLOG,
+                       L::INFO,
+                       ET::NETWORK, // Only keep this one event type parameter!
+                       buffer
+                       );
+          buffer = "";
+        }
+    }
+};
 
 class EiNetwork {
 
 public:
+  EiNetwork(); // 💡 FIXED: Missing constructor signature added here
   bool setup();
   bool startup();
   bool evtLoop();
+  bool isConnected() const;
 
 private:
   NetworkCredentials _config;
   NetworkState _state;;
-  WiFiManager wm;                                                     // 2. Initialize WiFiManager
+  // ORDER MATTERS HERE: wmLoggerBridge must be declared BEFORE wm
+  // so that it initializes first in memory.
+  WiFiManagerLogBridge wmLoggerBridge;
+  WiFiManager wm;
   String _configFileName;
 
   bool connect(String& ssid, String& pwd, int from);
@@ -51,9 +121,11 @@ private:
                 int lineNum,
                 const String& msg);
   bool readConfigFromDisk();
+  Storage::WriteResult writeConfigToDisk();
   JsonDocument createConfigJson(const NetworkCredentials& cfg) const;
   bool checkHardware();
   bool validateConfiguration();
+  static void saveConfigCallback();
 };
 
 extern EiNetwork network;
