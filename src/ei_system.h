@@ -4,10 +4,11 @@
 
 class EiSystem {
 public:
+  bool bootStrap();
   bool setup();
   bool startup();
-private:
   void loop();
+private:
 };
 
 extern EiSystem eiSystem;

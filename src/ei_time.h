@@ -27,28 +27,47 @@
 #include <ei_storage.h>
 
 struct TimeConfig {       // Default to U.S. Mountain Time. Applications may override as needed.
-    String olsonName = "America/Denver";
-    String posixRule = "MST7MDT,M3.2.0,M11.1.0";
+  bool dirty = true;
+  String posixRule = "MST7MDT,M3.2.0,M11.1.0";
 };
 
-struct TimeState {
-  bool timeValid;
-  bool ready;
-  String abbreviation;
-  bool posixChanged;
-  
+struct PendingTimeConfig {
+    bool   pending = false;
+    String posixRule;
 };
 
-class EiTime
-{
+class EiTime {
+public:
+  bool setup();
+  bool evtLoop();
+  uint8_t  second();
+  uint8_t  minute();
+  uint8_t  hour();
+  uint8_t  hour12();
+
+  uint8_t  day();
+  uint8_t  weekday();
+  uint8_t  month();
+  uint16_t year();
+
+  uint16_t millisecond();
+
+  bool isReady() const;
+  bool posixRuleChanged() const;
+  String getPosixRule() const;
+  String getLogTimeStamp();
+  time_t now();
+  bool setPosixRule(const String& rule);
+
 private:
-  static constexpr const char* _configFileName = "ei_timeCfg.json";
+  String _configFileName;
+//  static constexpr const char* _configFileName = "/ei_timeCfg.json";
   TimeConfig _config;
-  TimeState  _state;
+  PendingTimeConfig _pending;
   Timezone _tz;                           // the ezTime time zone struct
   
-  bool eventLoop();
-  bool setup();
+  void syncTime();
+  bool setTimeZone();
   bool readConfigFromDisk();
   Storage::WriteResult writeConfigToDisk();
   JsonDocument createConfigJson(const TimeConfig& cfg) const;
@@ -60,14 +79,21 @@ private:
   void logError(const char* function,
                 int lineNum,
                 const String& msg);
+  void saveBootTime();
+  String formatLogTime();
+  
+  static constexpr const char* LOG_TIME_FORMAT =
+      "Y-m-d~ H:i:s.v-T";
 
-public:
-  bool begin();
+  static constexpr const char* DISPLAY_TIME_FORMAT =
+      "g:i:s A";
 
-  bool isReady() const;
-  bool posixRuleChanged() const;
-  String getPosixRule() const;
-  String getLogTimeStamp();
+  static constexpr const char* DISPLAY_DATE_FORMAT =
+      "l, F j, Y";
+
+  String formatLogTime() const;
+
+  
 };
 
 extern EiTime eiTime;

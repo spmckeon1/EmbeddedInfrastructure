@@ -1,13 +1,28 @@
-//
-//  ei_scheduler.h
-//  
-//
-//  Created by Stephen McKeon on 7/25/26.
-//
+#pragma once
 
-#ifndef ei_scheduler_h
-#define ei_scheduler_h
 
-#include <stdio.h>
+enum class IntervalType
+{
+    IT_SECOND,
+    IT_MINUTE,
+    IT_HOUR,
+    IT_DAY
+};
 
-#endif /* ei_scheduler_h */
+struct RunTime
+{
+    IntervalType intvType;
+    uint16_t     intvToRun;
+    int32_t      lastRun = -1;
+};
+class Scheduler
+{
+public:
+  bool isTimeToRun(RunTime& rt);
+
+private:
+  int32_t getCurrentTick(const RunTime& rt);
+  void initializeLastRun(RunTime& rt);
+};
+
+extern Scheduler scheduler;

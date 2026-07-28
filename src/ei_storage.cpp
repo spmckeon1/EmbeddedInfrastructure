@@ -41,6 +41,12 @@ Storage::Storage()
 {
 }
 
+/*---------------    STRAGE EVENT LOOP   ---------------*/
+
+bool Storage::evtLoop() {
+  return false;
+}
+
 /*---------------    PUBLIC: START THE CHOOSEN FILE SYSTEM   ---------------*/
 
 bool Storage::startup()
@@ -308,7 +314,6 @@ size_t Storage::load_data(File f, uint8_t *buffer, size_t maxLen, size_t index) 
 /*---------------  WRITE FILE  IDS 122---------------*/
 
 Storage::WriteResult Storage::writeFile(const char * path, const char * message, int from) {
-  DUMP(path)
   File file = _fs->open(path, FILE_WRITE);
   if (!file) {
     logError(FN, LN, "Failed to open file '" + String(path) +
@@ -478,6 +483,7 @@ bool Storage::createDirIfNotExist(String dirName) {
 /*---------------    IF FILE DOES/DOES NOT EXIST ---------------*/
 
 Storage::EnsureFileResult Storage::ensureFileExists(const String& fileName, const JsonDocument& doc, int from){
+  Serial.printf("_fs = %p\n", _fs);
   if (_fs->exists(fileName)) {
     logInfo(FN, LN, "The file '" + fileName + "' exists." + conv.fromStr(from));
     return EnsureFileResult::AlreadyExists;

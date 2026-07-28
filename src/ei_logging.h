@@ -123,10 +123,28 @@ namespace ET {          // Event Type / Category
   String toStr(Type type);
 }
 
+struct LoggingConfig {
+  String topic = "/ei/to/nr/logs";
+  uint8_t qos = 0;
+  bool retain = false;
+};
 
 class Logging {
 private:
+  LoggingConfig _config;
   LogDestination _dest = LogDestination::RamBuffer;
+  
+  static constexpr size_t MAX_PENDING_LOGS = 100;
+  String _pendingLogQueue[MAX_PENDING_LOGS];
+  uint16_t _queueHead = 0;
+  uint16_t _queueTail = 0;
+  uint16_t _queueCount = 0;
+  bool enqueuePendingLog(const String& jsonLog);
+  bool dequeuePendingLog(String& jsonLog);
+  bool pendingLogsEmpty() const;
+  bool pendingLogsFull() const;
+  bool flushPendingLogs();
+  
   String formatSerialLogEntry(const char* file,
                               const char* function,
                               int lineNum,
@@ -138,16 +156,18 @@ private:
                                L::Level level,
                                ET::Type eventType,
                                const String& message);
-  void sendToNodeRedLogging(String logEntry);
+  bool sendToNodeRedLogging(const String& logEntry);
   void logInfo(const char* function,
                int lineNum,
                const String& msg);
   void logError(const char* function,
                 int lineNum,
                 const String& msg);
+  const char* baseFileName(const char* file);
 
 public:
 
+  bool evtLoop();
   void msg(
            const char* file,
            const char* function,
@@ -164,3 +184,5 @@ public:
 };
 
 extern Logging logging;
+
+

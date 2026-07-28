@@ -8,16 +8,28 @@
 
 #include <WiFi.h>
 #include <WiFiManager.h>  // 💡 Fixes: 'WiFiManager' / 'wm' was not declared in this scope
-#include <ei_appPolicy.h>
 #include <esp_wifi.h>
+
+#include <ei_appPolicy.h>
+#include <ei_logging.h>
+#include <ei_storage.h>
 #include <ei_types.h>
 
 class Logging; // Tells the compiler that the Logging class exists elsewhere
 
+/*
 struct NetworkCredentials {
     bool dirty = false;
     String ssid = "";
     String password = "";
+};
+*/
+
+struct NetworkConfig {
+    bool dirty = false;
+    String ssid;
+    String password;
+    wifi_power_t txPower = WIFI_POWER_8_5dBm;
 };
 
 struct StationState
@@ -100,7 +112,7 @@ public:
   bool isConnected() const;
 
 private:
-  NetworkCredentials _config;
+  NetworkConfig _config;
   NetworkState _state;;
   // ORDER MATTERS HERE: wmLoggerBridge must be declared BEFORE wm
   // so that it initializes first in memory.
@@ -108,8 +120,6 @@ private:
   WiFiManager wm;
   String _configFileName;
 
-  bool connect(String& ssid, String& pwd, int from);
-  void initAsyncPortal(const char* apName);
   void aWiFiEvent(WiFiEvent_t event);
   void onWifiGotIP(WiFiEventInfo_t info);
   void onWifiDisconnect(WiFiEventInfo_t info);
@@ -122,10 +132,12 @@ private:
                 const String& msg);
   bool readConfigFromDisk();
   Storage::WriteResult writeConfigToDisk();
-  JsonDocument createConfigJson(const NetworkCredentials& cfg) const;
+  JsonDocument createConfigJson(const NetworkConfig& cfg) const;
   bool checkHardware();
   bool validateConfiguration();
   static void saveConfigCallback();
 };
 
 extern EiNetwork network;
+
+

@@ -72,6 +72,8 @@ public:
   [[deprecated("WARNING: fileExists() has been renamed to ensureFileExists(). Please update your code call.")]]
   inline bool fileExists(String fname, String data, int from) {
   }
+  
+  bool evtLoop();
   bool startup();
   void dirReport(const char *dirname, uint8_t levels);
   String listDir(const char * dirname, uint8_t levels, char separator);
