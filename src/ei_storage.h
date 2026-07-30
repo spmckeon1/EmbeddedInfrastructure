@@ -95,7 +95,7 @@ public:
   void getInfo(StorageInfo& info) const;
   WriteResult writeJsonFile(const char* path, const JsonDocument& doc, int from);
   bool readJsonFile(const char* path, JsonDocument& doc, int from);
-  void writeLog(const String& logEntry);
+//  void writeLog(const String& logEntry);
 
 private:
   static constexpr int MAX_RAM_LINES    = 150;      // RAM log

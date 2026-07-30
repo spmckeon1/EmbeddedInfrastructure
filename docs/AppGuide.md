@@ -71,6 +71,32 @@ mqttHbPolicy
 appShortName/to/nr/mqtt/hb
 ```
 
+## Required Application to EmbeddedInfrastructure Actions
+
+### MQTT Subscriptions
+- The application is required to own and manage all MQTT topics used
+
+- In the boot process before any of the library functons are called the application MUST declare the total number of subscriptions it will use.
+```c++
+setMaxSubCnt(uint16_t maxCnt);
+```
+#### Example
+```c++
+setMaxSubCnt(3);
+```
+- The individual subscriptions must be submitted individually using the below function:
+```c++
+bool addSubscription(const String& name, const String& topic, uint8_t qos);
+```
+#### Examples:
+```c++ 
+addSubscription("Node-Red to GPS", "nr/to/gps/#", 2);
+addSubscription("App data GPS", "appData/gps/#", 2);
+addSubscription("To GPS serger", "to/server/gps/#", 2);
+
+- If more subscritions are submitted than allocated only the allocated number will be subscribled to.  If a greater nunber is submitted than used, memory will be wasted. 
+
+```
 ...
 
 ## Required Startup Sequence

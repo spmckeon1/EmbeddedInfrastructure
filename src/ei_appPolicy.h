@@ -10,6 +10,7 @@ struct AppDirPolicy {
   String dataDir   = "/libData";
   String logDir    = "/libLog";
   String appData   = "/appData";
+  String htmlDir   = "/html";
 };
 
 struct AppFnamePolicy {

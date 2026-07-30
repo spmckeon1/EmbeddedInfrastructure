@@ -58,6 +58,8 @@ public:
   String getLogTimeStamp();
   time_t now();
   bool setPosixRule(const String& rule);
+  String formatDuration(unsigned long milliseconds) const;
+  time_t getBootTime() const;
 
 private:
   String _configFileName;
@@ -75,10 +77,10 @@ private:
   bool validateConfiguration(const TimeConfig& cfg);
   void logInfo(const char* function,
                int lineNum,
-               const String& msg);
+               const String& msg) const;
   void logError(const char* function,
                 int lineNum,
-                const String& msg);
+                const String& msg) const;
   void saveBootTime();
   String formatLogTime();
   

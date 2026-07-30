@@ -23,13 +23,10 @@
 #include <Arduino.h>
 #include <ei_types.h>
 
+#define FI __FILE__           // compiler get file name
 #define FN __func__           // compiler get function name
-#define LN __LINE__               // what line was the compiler on
+#define LN __LINE__           // what line was the compiler on
 
-enum class LogDestination {
-    RamBuffer,
-    MqttServer
-};
 
 namespace T {           // Type
   enum Type {
@@ -74,59 +71,37 @@ namespace L {           // Level
   String toStr(Level level);
 }
 
-namespace ET {          // Event Type / Category
-  enum Type {
-    GENERAL,
+namespace ET
+{
+  inline constexpr const char GENERAL[]   = "GENERAL";
 
-    STORAGE,        // Infrastructure
-    NETWORK,
-    MQTT,
-    WIFI,
-    TIME,
-    LOGGING,
+  inline constexpr const char LOGGING[]   = "LOGGING";
+  inline constexpr const char STORAGE[]   = "STORAGE";
+  inline constexpr const char NETWORK[]   = "NETWORK";
+  inline constexpr const char MQTT[]      = "MQTT";
+  inline constexpr const char WIFI[]      = "WIFI";
+  inline constexpr const char TIME[]      = "TIME";
 
-    GPS,            // Hardware
-    ET_SERIAL,
-    SENSOR,
+  inline constexpr const char SENSOR[]    = "SENSOR";
 
-    MEMORY,           // System
-    CONFIG,
-    STARTUP,
-    SHUTDOWN,
+  inline constexpr const char MEMORY[]    = "MEMORY";
+  inline constexpr const char CONFIG[]    = "CONFIG";
+  inline constexpr const char STARTUP[]   = "STARTUP";
+  inline constexpr const char SHUTDOWN[]  = "SHUTDOWN";
 
-    USER,             // Application
-    COMMAND
-  };
-
-  inline constexpr const char* eventTypeNames[] = {     // Keep this table in the same order as the Type enum.
-    "GENERAL",
-
-    "STORAGE",
-    "NETWORK",
-    "MQTT",
-    "WIFI",
-    "TIME",
-
-    "GPS",
-    "SERIAL",
-    "SENSOR",
-
-    "MEMORY",
-    "CONFIG",
-    "STARTUP",
-    "SHUTDOWN",
-
-    "USER",
-    "COMMAND"
-  };
-  const char* toTxt(Type type);
-  String toStr(Type type);
+  inline constexpr const char USER[]      = "USER";
+  inline constexpr const char COMMAND[]   = "COMMAND";
 }
 
 struct LoggingConfig {
   String topic = "/ei/to/nr/logs";
   uint8_t qos = 0;
   bool retain = false;
+};
+
+enum class LogDestination {
+  RamBuffer,
+  MqttServer
 };
 
 class Logging {
@@ -143,7 +118,8 @@ private:
   bool dequeuePendingLog(String& jsonLog);
   bool pendingLogsEmpty() const;
   bool pendingLogsFull() const;
-  bool flushPendingLogs();
+//  bool flushPendingLogs();
+  bool flushOnePendingLog();
   
   String formatSerialLogEntry(const char* file,
                               const char* function,
@@ -154,7 +130,7 @@ private:
                                int lineNum,
                                T::Type recordType,
                                L::Level level,
-                               ET::Type eventType,
+                               const char* eventType,
                                const String& message);
   bool sendToNodeRedLogging(const String& logEntry);
   void logInfo(const char* function,
@@ -164,9 +140,12 @@ private:
                 int lineNum,
                 const String& msg);
   const char* baseFileName(const char* file);
+  
 
 public:
 
+  uint8_t registerEventType(const char* name);
+  const char* getEventTypeName(int typeId);
   bool evtLoop();
   void msg(
            const char* file,
@@ -174,12 +153,13 @@ public:
            int lineNum,
            T::Type recordType,
            L::Level level,
-           ET::Type eventType,
+           const char* eventType,
            const String& message
            );
   String dividerStr(const String& function, int line);
   void startup();
   void setDestination(LogDestination destination);
+  const char* destinationToString(LogDestination dest) const;
 
 };
 

@@ -6,6 +6,7 @@
 #include <ArduinoJson.h>
 #include <ezTime.h>
 
+#include <ei_events.h>
 #include <ei_scheduler.h>
 #include <ei_appPolicy.h>
 #include <ei_network.h>
@@ -17,36 +18,29 @@ EiTime eiTime;
 /*-----  TIME EVENT LOOP  -----*/
 
 bool EiTime::evtLoop() {
-  static RunTime ntpSetTimer = {IntervalType::IT_SECOND, 5, -1};
+  static RunTime ntpSetTimer = {IntervalType::IT_SECOND, 2, -1};
   static bool ntpSyncAnnounced = false;
-
   if (!network.isConnected())
     return false;
-
   if (timeStatus() != timeSet) {
     if (scheduler.isTimeToRun(ntpSetTimer))
       syncTime();
-
     ntpSyncAnnounced = false;
     return false;
   }
-
   if (!ntpSyncAnnounced) {
     logInfo(FN, LN, "NTP synchronization complete.");
     ntpSyncAnnounced = true;
   }
-
   if (_tz.getPosix() != _config.posixRule) {
     setTimeZone();
     saveBootTime();
     return false;
   }
-
   if (_pending.pending) {
     // applyPendingConfiguration();
     return false;
   }
-
   return false;
 }
 
@@ -76,7 +70,6 @@ bool EiTime::setup() {
   JsonDocument doc;
   _configFileName = appDirs.libCfgDir + "/ei_timeCfg.json";
   doc = createConfigJson(_config);
-
   storage.ensureFileExists(_configFileName, createConfigJson(_config), LN);         // Create the configuration file with defaults if it doesn't exist.
   if (!storage.readJsonFile(_configFileName.c_str(), doc, LN)) {                            // Read the configuration file.
     logError(FN, LN, "Failed to read: " + String(_configFileName));
@@ -85,9 +78,7 @@ bool EiTime::setup() {
   loadConfigFromJson(doc, _config);                                                 // Populate the working configuration.
   if (!validateConfiguration(_config)) {                                            // If validation fails...
     logInfo(FN, LN, "Invalid time configuration. Restoring defaults.");
-
     _config = TimeConfig{};                                                         // Restore defaults.
-
     Storage::WriteResult result = storage.writeJsonFile(_configFileName.c_str(),            // Rewrite configuration file.
                                                         createConfigJson(_config),
                                                         LN);
@@ -99,11 +90,6 @@ bool EiTime::setup() {
   logInfo(FN, LN, "EiTime setuo successfully completed.");
   return true;
 }
-
-/*---------------    STARTUP THE EZTIME TIME SERVICE  ---------------*/
-
-
-
 
 /*-----  READ THE EITIME CONFIGURATION FILE  -----*/
 
@@ -125,7 +111,7 @@ Storage::WriteResult EiTime::writeConfigToDisk() {
     return storage.writeJsonFile(_configFileName.c_str(), doc, LN);
 }
 
-/*-----  CREATE THE CONFIG JS)N OBJECT FROM THE cfg CONTENTS  -----*/
+/*-----  CREATE THE CONFIG JSON OBJECT FROM THE CFG CONTENTS  -----*/
 
 JsonDocument EiTime::createConfigJson(const TimeConfig& cfg) const {
   JsonDocument doc;
@@ -156,7 +142,7 @@ bool EiTime::validateConfiguration(const TimeConfig& cfg) {
 
 void EiTime::logInfo(const char* function,
                       int lineNum,
-                      const String& msg)
+                      const String& msg) const
 {
     logging.msg(__FILE__,
                 function,
@@ -171,7 +157,7 @@ void EiTime::logInfo(const char* function,
 
 void EiTime::logError(const char* function,
                       int lineNum,
-                      const String& msg)
+                      const String& msg) const
 {
     logging.msg(__FILE__,
                 function,
@@ -242,8 +228,22 @@ void EiTime::saveBootTime() {
   doc["bootTime"] = bootTime;                                                             // put the n=boot time inti a json object
   storage.writeJsonFile(appFnames.bootTime.c_str(), doc, LN);                             // write it to disk
   logInfo(FN, LN, "Saved boot time: " + String(bootTime) + " to " + appFnames.bootTime);  // log the actvity
+  logInfo(FN, LN, "The boot process is now complete and took " + String(millis()) + "ms");
+  logInfo(FN, LN, logging.dividerStr(FN, LN));
+  logInfo(FN, LN, logging.dividerStr(FN, LN));
+  eiEvents.notify(EiEvent::SystemReady); 
 }
 
+/*-----  READ THE BOOT TIME FILE AND RETURN IT  -----*/
+
+time_t EiTime::getBootTime() const {
+  JsonDocument doc;
+  if (!storage.readJsonFile(appFnames.bootTime.c_str(), doc, __LINE__)) {
+    logError(FN, LN, "Unable to read boot time.");
+    return 0;
+  }
+  return static_cast<time_t>(doc["bootTime"] | 0);
+}
 /*-----    GET LOG TIME STAMP  -----*/
 
 String EiTime::getLogTimeStamp() {
@@ -272,3 +272,32 @@ bool EiTime::setPosixRule(const String& rule) {
     writeConfigToDisk();
     return true;
 }
+
+/*-----  GET A DRRATION IN HUMAN READABLE FORMAT -----*/
+
+String EiTime::formatDuration(unsigned long milliseconds) const {
+    unsigned long days    =  milliseconds / 86400000UL;
+    unsigned long hours   = (milliseconds / 3600000UL) % 24;
+    unsigned long minutes = (milliseconds / 60000UL) % 60;
+    unsigned long seconds = (milliseconds / 1000UL) % 60;
+    return String(days)    + " Days " +
+           String(hours)   + " Hours " +
+           String(minutes) + " Minutes " +
+           String(seconds) + " Seconds";
+}
+
+/*-----  GET THE FORMATTED UPTIME IN HUMAN READABLE FORMAT -----*
+
+String EiTime::getFormattedUptime() const
+{
+    time_t bootTime = getBootTime();
+
+    if (bootTime == 0)
+        return "Unknown";
+
+    unsigned long elapsedMs =
+        static_cast<unsigned long>(now() - bootTime) * 1000UL;
+
+    return formatDuration(elapsedMs);
+}
+*/

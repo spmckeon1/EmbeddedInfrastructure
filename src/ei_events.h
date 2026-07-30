@@ -9,30 +9,39 @@
 
 #include "ei_types.h"
 
-enum class EventType : uint16_t {
-    None = 0,
-    TimePosixUpdated,                   // Time
+enum class EiEvent : uint16_t {
+  None = 0,
 
-    // Future...
+  // System
+  SystemReady,
+
+  // Time
+  TimePosixUpdated,
+
+  // WiFi
+  WifiConnected,
+  WifiDisconnected,
+
+  // MQTT
+  MqttConnected,
+  MqttDisconnected,
+
+  Count
 };
 
-struct Event {
-    EventType type = EventType::None;
-    uint32_t eventTime = 0;
-};
+using EiEventHandler = void (*)();
 
 class EiEvents {
-  bool begin();
-  bool post(EventType eventType);
-  bool get(Event &event);
-  bool available() const;
-  void clear();
+public:
+    bool startup();
+
+    bool on(EiEvent event, EiEventHandler handler);
+    bool off(EiEvent event, EiEventHandler handler);
+
+    void notify(EiEvent event);
+
 private:
-  static constexpr uint8_t MAX_EVENTS = 16;
-  Event _events[MAX_EVENTS];
-  uint8_t _head = 0;
-  uint8_t _tail = 0;
-  uint8_t _count = 0;
+    EiEventHandler _handlers[static_cast<uint16_t>(EiEvent::Count)] = {};
 };
 
 extern EiEvents eiEvents;

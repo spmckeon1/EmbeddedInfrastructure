@@ -23,23 +23,30 @@
 
 #include <ArduinoJson.h>
 #include <AsyncMqttClient.h>
+#include "ei_events.h"
 
 struct MqttConfig {
-    bool dirty = false;
-    String host;
-    uint16_t port = 1883;
-    String username;
-    String password;
+  String host;
+  uint16_t port = 1883;
+  String username;
+  String password;
+  bool dirty = false;
 };
 
 struct MqttState {
-  bool setupComplete = false;
+  bool operational = true;
   bool connected = false;
 };
 
 struct MqttStats {
     uint32_t messagesReceived = 0;
     uint32_t messagesSent     = 0;
+};
+
+struct MqttSubscription {
+    String  name;
+    String  topic;
+    uint8_t qos = 0;
 };
 
 class EiMqtt {
@@ -50,13 +57,18 @@ public:
   bool configure(const MqttConfig& cfg);
   bool mqttPubMsg(const String& topic, uint8_t qos, boolean retain, const char* message, int from);
   bool mqttPubMsg(const String& topic, uint8_t qos, boolean retain, const String& message, int from);
-
+  bool setMaxSubCnt(uint16_t maxCnt);
+  bool addSubscription(const String& name, const String& topic, uint8_t qos);
+  bool connected() const;
 private:
   MqttConfig _config;
   MqttState  _state;
   MqttStats  _stats;
   AsyncMqttClient _client;
   String _configFileName = "";
+  MqttSubscription* _subscriptions = nullptr;
+  uint16_t _maxSubCnt = 0;
+  uint16_t _subCnt    = 0;
 
   void applyConfiguration();
   void connect();
@@ -86,6 +98,8 @@ private:
   void logError(const char* function,
                 int lineNum,
                 const String& message) const;
+  bool addSubscriptions();
+  void dumpConfig() const;
   
 };
 

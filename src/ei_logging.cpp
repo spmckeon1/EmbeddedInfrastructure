@@ -13,16 +13,17 @@ Logging logging;
 /*-----  LOGGING EVENT LOOP  -----*/
 
 bool Logging::evtLoop() {
-  if(flushPendingLogs()) true;
-  return false;
+  flushOnePendingLog();
+
+  return flushOnePendingLog();
 }
 
 /*-----  STARTUP THE LOGGING SERVICE  -----*/
 
 void Logging::startup() {
   Serial.begin(115200);                                                         // set the serial port speed
-  dividerStr(FN, LN);
-  dividerStr(FN, LN);
+  logInfo(FN, LN, dividerStr(FN, LN));
+  logInfo(FN, LN, dividerStr(FN, LN));
   logInfo(FN, LN, "Starting boot process." );
   logInfo(FN, LN, "Serial started at 115200");
   logInfo(FN, LN, "Starting the Logging service");
@@ -54,7 +55,7 @@ String Logging::formatJsonStrLogEntry(const char* file,
                                       int lineNum,
                                       T::Type recordType,
                                       L::Level level,
-                                      ET::Type eventType,
+                                      const char* eventType,
                                       const String& message)
 {
   static uint32_t devSeq = 1;
@@ -68,7 +69,7 @@ String Logging::formatJsonStrLogEntry(const char* file,
   doc["line"]           = lineNum;
   doc["recordType"]     = T::toStr(recordType);
   doc["level"]          = L::toStr(level);
-  doc["eventType"]      = ET::toStr(eventType);
+  doc["eventType"]      = eventType;
   doc["message"]        = message;
 
   return conv.jsonObjToJsonStr(doc);
@@ -82,7 +83,7 @@ void Logging::msg(
     int lineNum,
     T::Type recordType,
     L::Level level,
-    ET::Type eventType,
+    const char* eventType,
     const String& message)
 {
   file = baseFileName(file);
@@ -101,26 +102,31 @@ void Logging::msg(
 
 /*-----  WRITE TO SYSLOG  -----*/
 
-bool Logging::sendToNodeRedLogging(const String& logEntry) {
-  switch (_dest) {
-    case LogDestination::RamBuffer:
-      storage.writeLog(logEntry);
-      return true;
-    case LogDestination::MqttServer:
-      return mqtt.mqttPubMsg(_config.topic, _config.qos, _config.retain, logEntry, LN);
-  }
-  return false;
+bool Logging::sendToNodeRedLogging(const String& logEntry)
+{
+    switch (_dest)
+    {
+        case LogDestination::RamBuffer:
+          return enqueuePendingLog(logEntry);
+        case LogDestination::MqttServer:
+          return mqtt.mqttPubMsg(_config.topic,
+                                   _config.qos,
+                                   _config.retain,
+                                   logEntry,
+                                   LN);
+    }
+
+    return false;
 }
 
 /*-----  PUT A DIVIDER IN IN THE LOG  -----*/
 
-// THIS IS INTENDED TO PUT A FORMATED DIVIDER LINE IN A LOG (EVENT) FILE
-
 String Logging::dividerStr(const String& function, int line) {
-    return "----- " + function + ":" + String(line) +
-           " -------------------------------------";
+    return "----- " + function + ":" + String(line) + " -------------------------------------";
 }
 
+
+/*-----  CONCERT THE T ENUM TO CHAR  -----*/
 
 const char* T::toTxt(Type type)  {
     return conv.enumToTxt(
@@ -129,12 +135,16 @@ const char* T::toTxt(Type type)  {
         sizeof(typeNames) / sizeof(typeNames[0]));
 }
 
+/*-----  CONCERT THE T ENUM TO STRING  -----*/
+
 String T::toStr(Type type) {
     return conv.enumToStr(
         type,
         typeNames,
         sizeof(typeNames) / sizeof(typeNames[0]));
 }
+
+/*-----  CONCERT THE L ENUM TO CHAR  -----*/
 
 const char* L::toTxt(Level level) {
     return conv.enumToTxt(
@@ -143,6 +153,8 @@ const char* L::toTxt(Level level) {
         sizeof(levelNames) / sizeof(levelNames[0]));
 }
 
+/*-----  CONCERT THE L ENUM TO STRING  -----*/
+
 String L::toStr(Level level) {
     return conv.enumToStr(
         level,
@@ -150,24 +162,23 @@ String L::toStr(Level level) {
         sizeof(levelNames) / sizeof(levelNames[0]));
 }
 
-const char* ET::toTxt(Type type) {
-    return conv.enumToTxt(
-        type,
-        eventTypeNames,
-        sizeof(eventTypeNames) / sizeof(eventTypeNames[0]));
-}
-
-String ET::toStr(Type type) {
-    return conv.enumToStr(
-        type,
-        eventTypeNames,
-        sizeof(eventTypeNames) / sizeof(eventTypeNames[0]));
-}
-
 /*-----  PUBLIC INTERFACE TO CHANGE LOGGING DESTINATION  -----*/
 
 void Logging::setDestination(LogDestination destination) {
-    _dest = destination;
+  _dest = destination;
+  logInfo(FN, LN, "Logging destination has been chaged to: " + String(destinationToString(_dest)));
+}
+
+/*-----  GET THE PRINTABLE VALUE OF _dest  -----*/
+
+const char* Logging::destinationToString(LogDestination dest) const
+{
+    switch (dest)
+    {
+        case LogDestination::RamBuffer: return "RamBuffer";
+        case LogDestination::MqttServer: return "MqttServer";
+        default:                        return "Unknown";
+    }
 }
 
 /*---------------  PUT THE RIGHT HEADERS INTO A STORAGE INFO LOG  ---------------*/
@@ -249,7 +260,7 @@ bool Logging::dequeuePendingLog(String& jsonLog) {
   return true;
 }
 
-/*-----  SEND THE QUEUED LOGS TO NODE-RED 1 AT A TIME  -----*/
+/*-----  SEND THE QUEUED LOGS TO NODE-RED 1 AT A TIME  -----*
 
 bool Logging::flushPendingLogs() {
   String jsonLog;
@@ -258,6 +269,23 @@ bool Logging::flushPendingLogs() {
       enqueuePendingLog(jsonLog);// Connection dropped again. Put this log back and stop trying.
       return false;
     }
+  }
+  return true;
+}
+
+ /*-----  SEND THE 1 QUEUED LOG TO sendToNodeRedLogging()  -----*/
+
+ bool Logging::flushOnePendingLog() {
+  if (pendingLogsEmpty())
+    return false;
+  if (!mqtt.connected())
+    return false;
+  String jsonLog;
+  if (!dequeuePendingLog(jsonLog))
+    return false;
+  if (!sendToNodeRedLogging(jsonLog)) {
+    enqueuePendingLog(jsonLog);
+    return false;
   }
   return true;
 }

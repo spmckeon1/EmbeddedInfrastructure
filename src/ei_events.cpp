@@ -10,37 +10,36 @@
 
 EiEvents eiEvents;
 
-bool EiEvents::post(EventType eventType) {
-    if (_count >= MAX_EVENTS)
-        return false;
-    _events[_tail].type = eventType;
-    _events[_tail].eventTime = millis();
-    _tail = (_tail + 1) % MAX_EVENTS;
-    _count++;
-    return true;
+bool EiEvents::startup() {
+  for (uint16_t i = 0; i < static_cast<uint16_t>(EiEvent::Count); i++)
+    _handlers[i] = nullptr;
+  return true;
 }
 
-bool EiEvents::get(Event &event)
-{
-    if (_count == 0)
-        return false;
-
-    event = _events[_head];
-
-    _head = (_head + 1) % MAX_EVENTS;
-    _count--;
-
-    return true;
+bool EiEvents::on(EiEvent event, EiEventHandler handler) {
+  uint16_t index = static_cast<uint16_t>(event);
+  if (event == EiEvent::None || index >= static_cast<uint16_t>(EiEvent::Count))
+    return false;
+  _handlers[index] = handler;
+  return true;
 }
 
-bool EiEvents::available() const
-{
-    return _count > 0;
+bool EiEvents::off(EiEvent event, EiEventHandler handler) {
+  uint16_t index = static_cast<uint16_t>(event);
+  if (event == EiEvent::None ||
+    index >= static_cast<uint16_t>(EiEvent::Count))
+    return false;
+  if (_handlers[index] != handler)
+    return false;
+  _handlers[index] = nullptr;
+  return true;
 }
 
-void EiEvents::clear()
-{
-    _head = 0;
-    _tail = 0;
-    _count = 0;
+void EiEvents::notify(EiEvent event) {
+  uint16_t index = static_cast<uint16_t>(event);
+  if (event == EiEvent::None ||
+    index >= static_cast<uint16_t>(EiEvent::Count))
+    return;
+  if (_handlers[index] != nullptr)
+    _handlers[index]();
 }

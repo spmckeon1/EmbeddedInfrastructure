@@ -6,7 +6,9 @@
 //
 
 #include <Arduino.h>
+#include "esp_mac.h" // Required for ESP-IDF MAC functions
 #include <ei_appPolicy.h>
+#include <ei_events.h>
 #include <ei_scheduler.h>
 #include <ei_conversion.h>
 #include <ei_storage.h>
@@ -48,11 +50,8 @@ bool EiNetwork::setup()     // This phase may not depend on services provided by
 bool EiNetwork::startup()
 {
   logInfo(FN, LN, "Initializing Network infrastructure...");
-//  if (!checkHardware())
-//      return false;
   storage.ensureFileExists(_configFileName,                           // Ensure the configuration file exists.
-                         createConfigJson(_config),
-                         LN);
+                         createConfigJson(_config), LN);
   if (!readConfigFromDisk()) {                                          // Load persisted configuration.
     logError(FN, LN, "Unable to load disk config layout.");
     return false;
@@ -90,24 +89,13 @@ void EiNetwork::onWifiGotIP(WiFiEventInfo_t info) {
   _state.sta.connected = true;
   _state.sta.ipAddress = WiFi.localIP().toString();
   _state.sta.ssid = WiFi.SSID();
-  
   if (_config.ssid.isEmpty() || _config.password.isEmpty()) {
     _config.ssid = WiFi.SSID();
     _config.password = WiFi.psk(); // Pulls the cached network key/passphrase
     _config.dirty = true;
   }
   logInfo(FN, LN, "Event 7: Network connection verified. Active IP: " + _state.sta.ipAddress);
-  // ACTIONS TO TAKE WHEN WIFI IS UP
-  
-  logInfo(FN, LN, "Testing TCP connection to broker...");
-
-  WiFiClient test;
-  if (test.connect("192.168.1.9", 1883)) {
-      logInfo(FN, LN, "TCP connection succeeded.");
-      test.stop();
-  } else {
-      logError(FN, LN, "TCP connection FAILED.");
-  }
+  eiEvents.notify(EiEvent::WifiConnected);
 }
 
 /*---------------  EVENT HANDLER: ROUTER DISCONNECTED  ---------------*/
@@ -117,9 +105,8 @@ void EiNetwork::onWifiDisconnect(WiFiEventInfo_t info) {
   _state.sta.connected = false;
   _state.sta.ipAddress = "";
   _state.sta.ssid = "";
-  
   logError(FN, LN, "Event 5: Router connection lost. Reason code: " + String(reason));
-  // ACTIONS TO TAKE WHEN WIFI IS UP
+  eiEvents.notify(EiEvent::WifiDisconnected);
 }
 
 /*---------------  PUT THE RIGHT  DERS INTO A NETWORK INFO LOG  ---------------*/
@@ -311,20 +298,20 @@ JsonDocument EiNetwork::createConfigJson(const NetworkConfig& cfg) const {
 /*-----  BOOT UP WIFI HARDWARE CHECK  -----*/
 
 bool EiNetwork::checkHardware() {
-  // return true without touching WiFi
-  return true;
-  WiFi.mode(WIFI_STA);                                                  // 1. Verify that the underlying ESP-IDF Wi-Fi driver is initialized.
-  wifi_mode_t currentMode;
-  esp_err_t err = esp_wifi_get_mode(&currentMode);                      // If it isn't init yet, we attempt to set a basic mode to trigger it.
-  if (err == ESP_ERR_WIFI_NOT_INIT) {
+  uint8_t mac_bytes[6];
+  esp_err_t err = esp_efuse_mac_get_default(mac_bytes);               // Reads the factory-burned base MAC address directly from eFuse
+  if (err != ESP_OK) {
     logError(FN, LN, "Wi-Fi hardware driver failed to initialize.");
-      return false;
+    return false;
   }
-  String mac = WiFi.macAddress();                                         // 2. Query the physical Wi-Fi radio's burnt-in MAC address.
-  if (mac == "00:00:00:00:00:00" || mac.length() == 0) {                  // If the radio hardware is faulty or unreadable, this returns an empty or zeroed string.
+  char mac_str[18];                                                     // Format bytes into a standard MAC string for validation
+  snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X",
+           mac_bytes[0], mac_bytes[1], mac_bytes[2], mac_bytes[3], mac_bytes[4], mac_bytes[5]);
+  String mac = String(mac_str);
+  if (mac == "00:00:00:00:00:00" || mac.length() == 0) {
     logError(FN, LN, "Wi-Fi hardware check failed: Invalid MAC address.");
     logInfo(FN, LN, "MAC address returned: '" + mac + "'");
-      return false;
+    return false;
   }
   logInfo(FN, LN, "Wi-Fi hardware is verified and ready. MAC: " + mac);
   return true;
@@ -376,4 +363,10 @@ void EiNetwork::saveConfigCallback() {
 
 bool EiNetwork::isConnected() const {
     return _state.sta.connected;
+}
+
+/*-----  PUBLIC ROUTINE TO GET THE IN USE IP ADDRESS  -----*/
+
+String EiNetwork::getIPAddress() const {
+    return _state.sta.ipAddress;
 }

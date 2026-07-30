@@ -18,3 +18,12 @@
 // -----------------------------------------------------------------------------
 
 #include <ei_types.h>
+
+namespace Text {
+  void getAppInfo(JsonDocument& doc, const char* filePath, const char* compileDate);
+  String getFileName(const char* filePath);
+  void GetAppName(JsonObject app, const String& fileName);
+  void getAppVersion(JsonObject app, const String& fileName);
+  String formatAppInfo(const JsonDocument& doc);
+  String addRuntimeInfo(String banner);
+}

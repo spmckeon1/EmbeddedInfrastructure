@@ -52,36 +52,27 @@ struct NetworkState
     AccessPointState ap;
 };
 
-/*
-struct NetworkState {
-    String connectedSSID;
-    String ipAddress;                 // Current active IP
-    String accessPtIP;                // IP when acting as an AP
-    unsigned long apCreatedTime = 0;
-};
-*/
 
-// 1. The custom stream bridge that intercepts character arrays
-class WiFiManagerLogBridge : public Print {
+class WiFiManagerLogBridge : public Print {             // 1. The custom stream bridge that intercepts character arrays
 private:
     String buffer;
 public:
-    WiFiManagerLogBridge() { buffer.reserve(128); }
+  WiFiManagerLogBridge() { buffer.reserve(128); }
 
-    size_t write(uint8_t c) override {
-        if (c == '\n') {
-            flushBuffer();
-        } else if (c != '\r') {
-            buffer += (char)c;
-        }
-        return 1;
+  size_t write(uint8_t c) override {
+    if (c == '\n') {
+      flushBuffer();
+    } else if (c != '\r') {
+      buffer += (char)c;
     }
+    return 1;
+  }
 
-    size_t write(const uint8_t *buffer, size_t size) override {
-        size_t n = 0;
-        while (size--) { n += write(*buffer++); }
-        return n;
-    }
+  size_t write(const uint8_t *buffer, size_t size) override {
+      size_t n = 0;
+      while (size--) { n += write(*buffer++); }
+      return n;
+  }
 
 private:
     void flushBuffer() {
@@ -110,6 +101,7 @@ public:
   bool startup();
   bool evtLoop();
   bool isConnected() const;
+  String getIPAddress() const;
 
 private:
   NetworkConfig _config;

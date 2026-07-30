@@ -17,6 +17,9 @@ EiMqtt mqtt;
 /*-----  MQTT EVENT LOOP  -----*/
 
 bool EiMqtt::evtLoop() {
+  if (!_state.operational)                                      // if mqtt is not operational do nothing
+      return false;
+  
   RunTime loopTimer = {IntervalType::IT_SECOND, 5, -1};
   if(!_state.connected && scheduler.isTimeToRun(loopTimer)) {
     connect();
@@ -83,18 +86,17 @@ bool EiMqtt::setup() {
 /*-----  APPLY THE CINFIGURATION DATA TO THE AsyncMqttClient LIBRARY  -----*/
 
 void EiMqtt::applyConfiguration() {
-    _client.setServer(_config.host.c_str(), _config.port);
-    _client.setCredentials(_config.username.c_str(),
-                           _config.password.c_str());
-    _client.setKeepAlive(10);
+  dumpConfig();
+  _client.setServer(_config.host.c_str(), _config.port);
+  _client.setCredentials(_config.username.c_str(),
+                         _config.password.c_str());
+  _client.setKeepAlive(10);
 }
 
 /*-----  STARTUP THE MQTT SERVUCE  -----*/
 
 void EiMqtt::connect() {
-  logInfo(FN, LN,
-      "Applying MQTT configuration: " +
-      _config.host + ":" + String(_config.port));
+  logInfo(FN, LN, "Applying MQTT configuration: " + _config.host + ":" + String(_config.port));
   _state.connected = false;
   logInfo(FN, LN, "Connecting to MQTT broker " + _config.host + ":" + String(_config.port));
   _client.connect();
@@ -195,32 +197,22 @@ bool EiMqtt::mqttPubMsg(const String& topic, uint8_t qos, boolean retain, const 
 
 void EiMqtt::onMqttConnect(bool sessionPresent) {
   _state.connected = true;
+  eiEvents.notify(EiEvent::MqttConnected);
+  logging.setDestination(LogDestination::MqttServer);
   logInfo(FN, LN, "Received MQTT connection notice. Session " +
           String(sessionPresent ? "is" : "is not") + " present.");
-  
-  
-//  publishOnlineStatus();
-  
-//  scheduleReconnectComplete();
-  
-//  eiEvents.dispatchMqttConnected(sessionPresent);
-  
-}
-
-/*---------------  ON MQTT CONNECT  ---------------*/
-
-void onMqttConnect(bool sessionPresent) {
-  
+  addSubscriptions();
 }
 
 /*---------------  ON MQTT DISCONNECT  ---------------*/
 
 void EiMqtt::onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
-    _state.connected = false;
-
-    logInfo(FN, LN,
-               "MQTT disconnected. Reason: " +
-               disconnectReasonToString(reason));
+  _state.connected = false;
+  eiEvents.notify(EiEvent::MqttDisconnected);
+  logging.setDestination(LogDestination::RamBuffer);
+  logInfo(FN, LN,
+          "MQTT disconnected. Reason: " +
+          disconnectReasonToString(reason));
 }
 
 /*---------------  ON MQTT SUBSCRIBE  ---------------*/
@@ -303,7 +295,9 @@ String EiMqtt::disconnectReasonToString(AsyncMqttClientDisconnectReason reason) 
     return "Unknown";
   }
   
-}/*-----  LOG INFO LOG MSG HELPER FUNCTION  -----*/
+}
+
+/*-----  LOG INFO LOG MSG HELPER FUNCTION  -----*/
 
 void EiMqtt::logInfo(const char* function, int lineNum, const String& message) const {
   logging.msg(__FILE__,
@@ -327,3 +321,75 @@ void EiMqtt::logError(const char* function, int lineNum, const String& message) 
               message);
 }
 
+/*-----  SET THE MAXIMUM NUMBER OF MQTT SUBSCRIPTIONS  -----*/
+
+bool EiMqtt::setMaxSubCnt(uint16_t maxCnt) {
+  if (_subscriptions != nullptr) {
+    logError(FN, LN, "Subscription table already allocated.");
+    return false;
+  }
+  if (maxCnt == 0) {
+    logError(FN, LN, "Maximum subscription count must be greater than zero.");
+    return false;
+  }
+  _subscriptions = new (std::nothrow) MqttSubscription[maxCnt];
+  if (_subscriptions == nullptr) {
+    logError(FN, LN, "Unable to allocate MQTT subscription table. "
+             "MQTT subsystem disabled.");
+    _state.operational = false;
+    return false;
+  }
+  _maxSubCnt = maxCnt;
+  _subCnt    = 0;
+  return true;
+}
+/*-----  ALLOW THE APP TO ADD SUBSCRIPTIONS  -----*/
+
+bool EiMqtt::addSubscription(const String& name, const String& topic, uint8_t qos) {
+  if (_subscriptions == nullptr) {
+    logError(FN, LN, "Call setMaxSubCnt() before addSubscription().");
+    return false;
+  }
+  if (_subCnt >= _maxSubCnt) {
+    logError(FN, LN, "Maximum subscription count exceeded.");
+    return false;
+  }
+  _subscriptions[_subCnt].name  = name;
+  _subscriptions[_subCnt].topic = topic;
+  _subscriptions[_subCnt].qos   = qos;
+  _subCnt++;
+  return true;
+}
+
+/*-----  ADD THE APP DESIRED SUBSCRIPTIONS  -----*/
+
+bool EiMqtt::addSubscriptions() {
+  if (!_state.operational)
+    return false;
+  if (!_state.connected)
+    return false;
+  for (uint16_t i = 0; i < _subCnt; i++) {
+    _client.subscribe(_subscriptions[i].topic.c_str(),
+                      _subscriptions[i].qos);
+  }
+  return true;
+}
+
+/*-----  PUBLIC IS THE MQTT SERVICE CONNECTED  -----*/
+
+bool EiMqtt::connected() const {
+  return _state.connected;
+}
+
+void EiMqtt::dumpConfig() const
+{
+    Serial.println();
+    Serial.println("========== MQTT Configuration ==========");
+    Serial.printf("dirty    : %s\n", _config.dirty ? "true" : "false");
+    Serial.printf("host     : '%s'\n", _config.host.c_str());
+    Serial.printf("port     : %u\n", _config.port);
+    Serial.printf("username : '%s'\n", _config.username.c_str());
+    Serial.printf("password : '%s'\n", _config.password.c_str());
+    Serial.println("========================================");
+    Serial.println();
+}

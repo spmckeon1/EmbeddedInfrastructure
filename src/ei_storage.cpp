@@ -24,15 +24,7 @@
 #include <ei_web.h>
 #include <ei_storage.h>
 
-
-// ============================================================================
-// 🎯 THE CRITICAL PHYSICAL ALLOCATION LINE
-// ============================================================================
 Storage storage;        // This brings the object to life in memory!
-
-// ============================================================================
-// CLASS LIFECYCLE MANAGEMENT
-// ============================================================================
 
 /*---------------    AUTIMATICALLY CLEARS THE INTERNAL POINTER AT BOOT   ---------------*/
 
@@ -69,84 +61,71 @@ bool Storage::startup()
 /*---------------    START SD FILE SYSTEM   ---------------*/
 
 #ifdef SYSTEM_USES_SD
+  bool Storage::startSD(int cspin) {
+    logInfo(FN, LN, "Setting up the SD file system.");
 
-bool Storage::startSD(int cspin) {
-  logInfo(FN, LN, "Setting up the SD file system.");
+    // 1. Mount the physical SD Card hardware partition
+    if(!SD.begin(cspin)){                                                                     // start the SD system
+      logError(FN, LN, "Card Mount Failed.");
+      return false;                                                                           // and exit the function
+    }
+    _fs = &SD;
+    refreshStats();
+    String s = "";
+    switch(SD.cardType()) {    // Query hardware details safely (Now fully protected by the active capsule)
+      case CARD_NONE:
+        s = "No SD card attached.";
+        break;
+      case CARD_MMC:
+        s = "SD Card Type: MMC.";
+        break;
+      case CARD_SD:
+        s = "SD Card Type: SDSC.";
+        break;
+      case CARD_SDHC:
+        s = "SD Card Type: SDHC.";
+        break;
+      default: s = "SD Card Type: UNKNOWN.";
+    }
+    _state.mounted = true;
+    logInfo(FN, LN, s);
+    StorageInfo info;
+    getInfo(info);
+    int cardSize = (int)(SD.cardSize() / (1024 * 1024));                                      // get the size of the SD card
+    logInfo(FN, LN, "SD Card Size: " + String(cardSize) + " MB.");
+    logInfo(FN, LN, "Total space: " + String(info.totalBytes / (1024 * 1024)) + " MB.");
+    logInfo(FN, LN, "Used space:  " + String(info.usedBytes  / (1024 * 1024)) + " MB.");
+    logInfo(FN, LN, String(info.freeBytes  / (1024 * 1024)) + " MB.");
 
-  // 1. Mount the physical SD Card hardware partition
-  if(!SD.begin(cspin)){                                                                     // start the SD system
-    logError(FN, LN, "Card Mount Failed.");
-    return false;                                                                           // and exit the function
+    return true;
   }
-  _fs = &SD;
-  refreshStats();
-  String s = "";
-  switch(SD.cardType()) {    // Query hardware details safely (Now fully protected by the active capsule)
-    case CARD_NONE:
-      s = "No SD card attached.";
-      break;
-    case CARD_MMC:
-      s = "SD Card Type: MMC.";
-      break;
-    case CARD_SD:
-      s = "SD Card Type: SDSC.";
-      break;
-    case CARD_SDHC:
-      s = "SD Card Type: SDHC.";
-      break;
-    default: s = "SD Card Type: UNKNOWN.";
-  }
-  _state.mounted = true;
-  logInfo(FN, LN, s);
-  StorageInfo info;
-  getInfo(info);
-  int cardSize = (int)(SD.cardSize() / (1024 * 1024));                                      // get the size of the SD card
-  logInfo(FN, LN, "SD Card Size: " + String(cardSize) + " MB.");
-  logInfo(FN, LN, "Total space: " + String(info.totalBytes / (1024 * 1024)) + " MB.");
-  logInfo(FN, LN, "Used space:  " + String(info.usedBytes  / (1024 * 1024)) + " MB.");
-  logInfo(FN, LN, String(info.freeBytes  / (1024 * 1024)) + " MB.");
-
-  return true;
-}
-
 #endif
-\
+
 /*---------------    START LTTLEFS FILE SYSTEM   ---------------*/
 
 #ifdef SYSTEM_USES_LITTLEFS
-
-bool Storage::startLittleFS() {
-  logInfo(FN, LN, "Setting up the LittleFS file system.");
-
-  // 1. Mount the physical hardware partition map
-  if(!LittleFS.begin(FORMAT_LITTLEFS_IF_FAILED)) {               // load LittleFS
-    logInfo(FN, LN, "LittleFS Mount Failed\n");                 // log this
-    return false;                                                // and exit the function
+  bool Storage::startLittleFS() {
+    logInfo(FN, LN, "Setting up the LittleFS file system.");
+    if(!LittleFS.begin(FORMAT_LITTLEFS_IF_FAILED)) {                // 1. Mount the physical hardware partition map
+      logInfo(FN, LN, "LittleFS Mount Failed\n");                   // log this
+      return false;                                                 // and exit the function
+    }
+    _state.mounted = true;
+    _fs = &LittleFS;
+    refreshStats();
+    size_t totalBytesRaw = LittleFS.totalBytes();                           // 2. Perform flash partition space diagnostics safely
+    size_t usedBytesRaw  = LittleFS.usedBytes();
+    float totalKB = totalBytesRaw / 1024.0;
+    float usedKB  = usedBytesRaw / 1024.0;
+    float freeKB  = totalKB - usedKB;
+    logInfo(FN, LN, "LittleFS Total Space: " + String(totalKB, 1) + " KB");   // You can now safely print or save these variables anywhere!
+    logInfo(FN, LN, "LittleFS Used Space:  " + String(usedKB, 1) + " KB");
+    logInfo(FN, LN, "LittleFS Free Space:  " + String(freeKB, 1) + " KB");
+    if (freeKB < 10.0) {                                                      // Low space safety check
+      logInfo(FN, LN, "WARNING: Low disk space! Less than 10 KB remaining.");
+    }
+    return true;
   }
-  _state.mounted = true;
-  _fs = &LittleFS;
-  refreshStats();
-
-  // 2. Perform flash partition space diagnostics safely
-  size_t totalBytesRaw = LittleFS.totalBytes();
-  size_t usedBytesRaw  = LittleFS.usedBytes();
-  float totalKB = totalBytesRaw / 1024.0;
-  float usedKB  = usedBytesRaw / 1024.0;
-  float freeKB  = totalKB - usedKB;
-
-  // You can now safely print or save these variables anywhere!
-  logInfo(FN, LN, "LittleFS Total Space: " + String(totalKB, 1) + " KB");
-  logInfo(FN, LN, "LittleFS Used Space:  " + String(usedKB, 1) + " KB");
-  logInfo(FN, LN, "LittleFS Free Space:  " + String(freeKB, 1) + " KB");
-
-  // Low space safety check
-  if (freeKB < 10.0) {
-    logInfo(FN, LN, "WARNING: Low disk space! Less than 10 KB remaining.");
-  }
-
-  return true;
-}
-
 #endif
 
 /*---------------  PUBLIC INTERACE TO REQUEST A DIRECTORY LISTIMG APPEAR IN THE SYSLOG  ---------------*/
@@ -356,7 +335,7 @@ bool Storage::createFile(const char * path, const char * message) {
   return true;
 }
 
-/*---------------  APPEND TO FILE  ID 129---------------
+/*---------------  APPEND TO FILE  ---------------
 path            FQN of the file
 message         Data to append to the file
 return          the number of bytes written to the file
@@ -463,7 +442,6 @@ int Storage::getFileSize(const char * path) {
 }
 
 /*---------------    CREATE DIRECTOR IF IT DOES NOT EXIST---------------*/
-// 5/199/2024 - added the parameter 'fs::FS & fs'
 
 bool Storage::createDirIfNotExist(String dirName) {
   if (!_fs->exists(dirName.c_str())) {                                                // if the 'dirname' does not exist
@@ -483,7 +461,6 @@ bool Storage::createDirIfNotExist(String dirName) {
 /*---------------    IF FILE DOES/DOES NOT EXIST ---------------*/
 
 Storage::EnsureFileResult Storage::ensureFileExists(const String& fileName, const JsonDocument& doc, int from){
-  Serial.printf("_fs = %p\n", _fs);
   if (_fs->exists(fileName)) {
     logInfo(FN, LN, "The file '" + fileName + "' exists." + conv.fromStr(from));
     return EnsureFileResult::AlreadyExists;
@@ -517,25 +494,21 @@ void Storage::refreshStats() {
 /*---------------  REFRESH THE LITTLEFS STORAGE STATS  ---------------*/
 
 #ifdef  SYSTEM_USES_LITTLEFS
-
-void Storage::refreshLittleFSStats() {
-    _stats.totalBytes = LittleFS.totalBytes();
-    _stats.usedBytes  = LittleFS.usedBytes();
-    _stats.freeBytes  = _stats.totalBytes - _stats.usedBytes;
-}
-
+  void Storage::refreshLittleFSStats() {
+      _stats.totalBytes = LittleFS.totalBytes();
+      _stats.usedBytes  = LittleFS.usedBytes();
+      _stats.freeBytes  = _stats.totalBytes - _stats.usedBytes;
+  }
 #endif
 
 /*---------------  REFRESH THE SD STORAGE STATS  ---------------*/
 
 #ifdef SYSTEM_USES_SD
-
-void Storage::refreshSDStats() {
-    _stats.totalBytes = SD.totalBytes();
-    _stats.usedBytes  = SD.usedBytes();
-    _stats.freeBytes  = _stats.totalBytes - _stats.usedBytes;
-}
-
+  void Storage::refreshSDStats() {
+      _stats.totalBytes = SD.totalBytes();
+      _stats.usedBytes  = SD.usedBytes();
+      _stats.freeBytes  = _stats.totalBytes - _stats.usedBytes;
+  }
 #endif
 
 /*---------------  PUBLIC CALL TO GET DISK STATS  ---------------*/
@@ -603,13 +576,12 @@ bool Storage::readJsonFile(const char* path, JsonDocument& doc, int from) {
     auto err = deserializeJson(doc, json);
   if (err) {
     logError(FN, LN, "Unable to parse JSON file: " + String(path) + "Error = " + String(err.c_str()));
-//    logging.msg("Unable to parse JSON file '%s': %s", path, err.c_str());
     return false;
   }
   return true;
 }
 
-/*-----  WRITE A LOGGING EVENT TO THE RAM DISK  -----*/
+/*-----  WRITE A LOGGING EVENT TO THE RAM DISK  -----*
 
 void Storage::writeLog(const String& logEntry) {
   strncpy(_ramLog[_writeIndex], logEntry.c_str(), MAX_LOG_LINE_LEN - 1);
@@ -620,3 +592,5 @@ void Storage::writeLog(const String& logEntry) {
     _wrapped = true;
   }
 }
+
+*/
