@@ -11,6 +11,7 @@
 #include <ei_appPolicy.h>
 #include <ei_network.h>
 #include <ei_storage.h>
+#include <ei_utilities.h>
 #include <ei_time.h>
 
 EiTime eiTime;
@@ -29,7 +30,7 @@ bool EiTime::evtLoop() {
     return false;
   }
   if (!ntpSyncAnnounced) {
-    logInfo(FN, LN, "NTP synchronization complete.");
+    logInfo(LS, ET::TIME, "NTP synchronization complete.");
     ntpSyncAnnounced = true;
   }
   if (_tz.getPosix() != _config.posixRule) {
@@ -48,7 +49,7 @@ bool EiTime::evtLoop() {
 /*-----  CALL FOR NTP SYNC  -----*/
 
 void EiTime::syncTime() {
-  logInfo(FN, LN, "Initiating for NTP synchronization...");
+  logInfo(LS, ET::TIME, "Initiating for NTP synchronization...");
    updateNTP();
    return;
 }
@@ -57,10 +58,10 @@ void EiTime::syncTime() {
 
 bool EiTime::setTimeZone() {
   if(_tz.setPosix(_config.posixRule)) {
-    logInfo(FN, LN, "Applied POSIX timezone: " + _config.posixRule);
+    logInfo(LS, ET::TIME, "Applied POSIX timezone: " + _config.posixRule);
     return true;
   }
-  logError(FN, LN, "Unable to apply POSIX timezone: " + _config.posixRule);
+  logError(LS, ET::TIME, "Unable to apply POSIX timezone: " + _config.posixRule);
   return false;
 }
 
@@ -72,22 +73,22 @@ bool EiTime::setup() {
   doc = createConfigJson(_config);
   storage.ensureFileExists(_configFileName, createConfigJson(_config), LN);         // Create the configuration file with defaults if it doesn't exist.
   if (!storage.readJsonFile(_configFileName.c_str(), doc, LN)) {                            // Read the configuration file.
-    logError(FN, LN, "Failed to read: " + String(_configFileName));
+    logError(LS, ET::TIME, "Failed to read: " + String(_configFileName));
     return false;
   }
   loadConfigFromJson(doc, _config);                                                 // Populate the working configuration.
   if (!validateConfiguration(_config)) {                                            // If validation fails...
-    logInfo(FN, LN, "Invalid time configuration. Restoring defaults.");
+    logInfo(LS, ET::TIME, "Invalid time configuration. Restoring defaults.");
     _config = TimeConfig{};                                                         // Restore defaults.
     Storage::WriteResult result = storage.writeJsonFile(_configFileName.c_str(),            // Rewrite configuration file.
                                                         createConfigJson(_config),
                                                         LN);
     if (result != Storage::WriteResult::Success) {
-      logError(FN, LN, "Failed to write default configuration.");
+      logError(LS, ET::TIME, "Failed to write default configuration.");
       return false;
     }
   }
-  logInfo(FN, LN, "EiTime setuo successfully completed.");
+  logInfo(LS, ET::TIME, "EiTime setuo successfully completed.");
   return true;
 }
 
@@ -130,42 +131,12 @@ void EiTime::loadConfigFromJson(const JsonDocument& doc, TimeConfig& cfg) const 
 
 bool EiTime::validateConfiguration(const TimeConfig& cfg) {
   if (cfg.posixRule.isEmpty()) {
-    logError(FN, LN, "Failed to validate TimeConfig: "
+    logError(LS, ET::TIME, "Failed to validate TimeConfig: "
                     "cfg.posixRule: " + cfg.posixRule
                     );
     return false;
   }
   return true;
-}
-
-/*-----  PUT THE RIGHT HEADERS INTO A LOG MSG  -----*/
-
-void EiTime::logInfo(const char* function,
-                      int lineNum,
-                      const String& msg) const
-{
-    logging.msg(__FILE__,
-                function,
-                lineNum,
-                T::SYSLOG,
-                L::INFO,
-                ET::TIME,
-                msg);
-}
-
-/*-----  PUT THE RIGHT HEADERS INTO A LOG MSG  -----*/
-
-void EiTime::logError(const char* function,
-                      int lineNum,
-                      const String& msg) const
-{
-    logging.msg(__FILE__,
-                function,
-                lineNum,
-                T::SYSLOG,
-                L::ERROR,
-                ET::TIME,
-                msg);
 }
 
 
@@ -227,10 +198,10 @@ void EiTime::saveBootTime() {
   time_t bootTime = _tz.now() - (millis() / 1000);                                       // get the actual boot time
   doc["bootTime"] = bootTime;                                                             // put the n=boot time inti a json object
   storage.writeJsonFile(appFnames.bootTime.c_str(), doc, LN);                             // write it to disk
-  logInfo(FN, LN, "Saved boot time: " + String(bootTime) + " to " + appFnames.bootTime);  // log the actvity
-  logInfo(FN, LN, "The boot process is now complete and took " + String(millis()) + "ms");
-  logInfo(FN, LN, logging.dividerStr(FN, LN));
-  logInfo(FN, LN, logging.dividerStr(FN, LN));
+  logInfo(LS, ET::TIME, "Saved boot time: " + String(bootTime) + " to " + appFnames.bootTime);  // log the actvity
+  logInfo(LS, ET::TIME, "The boot process is now complete and took " + String(millis()) + "ms");
+  logInfo(LS, ET::TIME, logging.dividerStr(FN, LN));
+  logInfo(LS, ET::TIME, logging.dividerStr(FN, LN));
   eiEvents.notify(EiEvent::SystemReady); 
 }
 
@@ -239,7 +210,7 @@ void EiTime::saveBootTime() {
 time_t EiTime::getBootTime() const {
   JsonDocument doc;
   if (!storage.readJsonFile(appFnames.bootTime.c_str(), doc, __LINE__)) {
-    logError(FN, LN, "Unable to read boot time.");
+    logError(LS, ET::TIME, "Unable to read boot time.");
     return 0;
   }
   return static_cast<time_t>(doc["bootTime"] | 0);
@@ -275,29 +246,32 @@ bool EiTime::setPosixRule(const String& rule) {
 
 /*-----  GET A DRRATION IN HUMAN READABLE FORMAT -----*/
 
-String EiTime::formatDuration(unsigned long milliseconds) const {
-    unsigned long days    =  milliseconds / 86400000UL;
-    unsigned long hours   = (milliseconds / 3600000UL) % 24;
-    unsigned long minutes = (milliseconds / 60000UL) % 60;
-    unsigned long seconds = (milliseconds / 1000UL) % 60;
-    return String(days)    + " Days " +
-           String(hours)   + " Hours " +
-           String(minutes) + " Minutes " +
-           String(seconds) + " Seconds";
+String EiTime::formatDuration(uint32_t ms, DurFormat format) {
+  const uint32_t days    = ms / 86400000UL;
+  const uint32_t hours   = (ms / 3600000UL) % 24;
+  const uint32_t minutes = (ms / 60000UL) % 60;
+  const uint32_t seconds = (ms / 1000UL) % 60;
+
+  switch (format)
+  {
+    case DurFormat::COMPACT:
+      return  String(days) + "-" +
+              Text::pad(String(hours),   '0', 2) + ":" +
+              Text::pad(String(minutes), '0', 2) + ":" +
+              Text::pad(String(seconds), '0', 2);
+
+    case DurFormat::PRETTY:
+      return  String(days) + " days, " +
+              Text::pad(String(hours),   '0', 2) + ":" +
+              Text::pad(String(minutes), '0', 2) + ":" +
+              Text::pad(String(seconds), '0', 2);
+
+    case DurFormat::VERBOSE:
+      return  String(days)    + " Days " +
+              String(hours)   + " Hours " +
+              String(minutes) + " Minutes " +
+              String(seconds) + " Seconds";
+  }
+
+  return "";
 }
-
-/*-----  GET THE FORMATTED UPTIME IN HUMAN READABLE FORMAT -----*
-
-String EiTime::getFormattedUptime() const
-{
-    time_t bootTime = getBootTime();
-
-    if (bootTime == 0)
-        return "Unknown";
-
-    unsigned long elapsedMs =
-        static_cast<unsigned long>(now() - bootTime) * 1000UL;
-
-    return formatDuration(elapsedMs);
-}
-*/

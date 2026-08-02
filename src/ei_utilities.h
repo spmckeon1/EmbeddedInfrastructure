@@ -26,4 +26,5 @@ namespace Text {
   void getAppVersion(JsonObject app, const String& fileName);
   String formatAppInfo(const JsonDocument& doc);
   String addRuntimeInfo(String banner);
+  String pad(const String& s, char padCh, int width);
 }

@@ -44,21 +44,21 @@ bool EiMqtt::setup() {
   JsonDocument doc;
   configToJson(doc);
   _configFileName = appDirs.libCfgDir + "/ei_mqttCfg.json";
-  logInfo(FN, LN, "Starting MQTT subsystem...");
+  logInfo(LS, ET::MQTT, "Starting MQTT subsystem...");
   Storage::EnsureFileResult result =                                        // Ensure the configuration file exists.
             storage.ensureFileExists(_configFileName.c_str(), doc, LN);
   switch (result) {
     case Storage::EnsureFileResult::Created:
-      logInfo(FN, LN, "Created default MQTT configuration file.");
+      logInfo(LS, ET::MQTT, "Created default MQTT configuration file.");
       break;
     case Storage::EnsureFileResult::AlreadyExists:
       break;                                                                  // Nothing to do
     case Storage::EnsureFileResult::Error:
-      logError(FN, LN, "Unable to ensure MQTT configuration file exists.");
+      logError(LS, ET::MQTT, "Unable to ensure MQTT configuration file exists.");
       return false;
   }
   if(!readCfgFromDisk()) {
-    logError(FN, LN, "Unable to read MQTT configuration.");
+    logError(LS, ET::MQTT, "Unable to read MQTT configuration.");
     return false;
   }
   applyConfiguration();
@@ -79,7 +79,7 @@ bool EiMqtt::setup() {
     onMqttPublish(packetId);
   });
   configureLastWill();                                                      // Configure the Last Will and Testament.
-  logInfo(FN, LN, "MQTT subsystem initialized.");
+  logInfo(LS, ET::MQTT, "MQTT subsystem initialized.");
   return true;
 }
 
@@ -88,17 +88,17 @@ bool EiMqtt::setup() {
 void EiMqtt::applyConfiguration() {
   dumpConfig();
   _client.setServer(_config.host.c_str(), _config.port);
-  _client.setCredentials(_config.username.c_str(),
-                         _config.password.c_str());
+  _client.setCredentials(_config.brokerUser.c_str(),
+                         _config.brokerPwd.c_str());
   _client.setKeepAlive(10);
 }
 
 /*-----  STARTUP THE MQTT SERVUCE  -----*/
 
 void EiMqtt::connect() {
-  logInfo(FN, LN, "Applying MQTT configuration: " + _config.host + ":" + String(_config.port));
+  logInfo(LS, ET::MQTT, "Applying MQTT configuration: " + _config.host + ":" + String(_config.port));
   _state.connected = false;
-  logInfo(FN, LN, "Connecting to MQTT broker " + _config.host + ":" + String(_config.port));
+  logInfo(LS, ET::MQTT, "Connecting to MQTT broker " + _config.host + ":" + String(_config.port));
   _client.connect();
 }
 
@@ -106,7 +106,7 @@ void EiMqtt::connect() {
 
 void EiMqtt::configureLastWill() {
   if (!appMqttLwtPolicy.enabled) {
-    logInfo(FN, LN, "Last Will & Testament disabled.");
+    logInfo(LS, ET::MQTT, "Last Will & Testament disabled.");
     return;
   }
   _client.setWill(
@@ -115,7 +115,7 @@ void EiMqtt::configureLastWill() {
                   appMqttLwtPolicy.retain,
                   appMqttLwtPolicy.offlineMsg.c_str()
   );
-  logInfo(FN, LN, "Registered Last Will & Testament protect lane on topic: " + appMqttLwtPolicy.topic);
+  logInfo(LS, ET::MQTT, "Registered Last Will & Testament protect lane on topic: " + appMqttLwtPolicy.topic);
 }
 
 /*-----  CONFIGURE THE HEARTBEAT  -----*/
@@ -135,8 +135,8 @@ void EiMqtt::configToJson(JsonDocument& doc) const
 {
     doc["host"]   = _config.host;
     doc["port"]     = _config.port;
-    doc["username"] = _config.username;
-    doc["password"] = _config.password;
+    doc["brokerUser"] = _config.brokerUser;
+    doc["brokerPwd"] = _config.brokerPwd;
 }
 
 /*-----  JSON DOC TO _config DATA  -----*/
@@ -145,8 +145,8 @@ bool EiMqtt::jsonToConfig(const JsonDocument& doc)
 {
     _config.host   = doc["host"]   | "";
     _config.port     = doc["port"]     | 1883;
-    _config.username = doc["username"] | "";
-    _config.password = doc["password"] | "";
+    _config.brokerUser = doc["brokerUser"] | "";
+    _config.brokerPwd = doc["brokerPwd"] | "";
 
     return true;
 }
@@ -156,7 +156,7 @@ bool EiMqtt::jsonToConfig(const JsonDocument& doc)
 bool EiMqtt::readCfgFromDisk() {
   JsonDocument doc;
   if (!storage.readJsonFile(_configFileName.c_str(), doc, LN)) {
-    logError(FN, LN, "Unable to read MQTT configuration.");
+    logError(LS, ET::MQTT, "Unable to read MQTT configuration.");
     return false;
   }
   return jsonToConfig(doc);
@@ -169,15 +169,15 @@ bool EiMqtt::writeCfgToDisk() {
 
   doc["host"]     = _config.host;
   doc["port"]     = _config.port;
-  doc["username"] = _config.username;
-  doc["password"] = _config.password;
+  doc["brokerUser"] = _config.brokerUser;
+  doc["brokerPwd"] = _config.brokerPwd;
 
   if (storage.writeJsonFile(_configFileName.c_str(), doc, LN) != Storage::WriteResult::Success) {
-    logError(FN, LN, "Unable to write MQTT configuration.");
+    logError(LS, ET::MQTT, "Unable to write MQTT configuration.");
     return false;
   }
   _config.dirty = false;
-  logInfo(FN, LN, "MQTT configuration written to disk.");
+  logInfo(LS, ET::MQTT, "MQTT configuration written to disk.");
   return true;
 }
 
@@ -199,7 +199,7 @@ void EiMqtt::onMqttConnect(bool sessionPresent) {
   _state.connected = true;
   eiEvents.notify(EiEvent::MqttConnected);
   logging.setDestination(LogDestination::MqttServer);
-  logInfo(FN, LN, "Received MQTT connection notice. Session " +
+  logInfo(LS, ET::MQTT, "Received MQTT connection notice. Session " +
           String(sessionPresent ? "is" : "is not") + " present.");
   addSubscriptions();
 }
@@ -210,7 +210,7 @@ void EiMqtt::onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
   _state.connected = false;
   eiEvents.notify(EiEvent::MqttDisconnected);
   logging.setDestination(LogDestination::RamBuffer);
-  logInfo(FN, LN,
+  logInfo(LS, ET::MQTT,
           "MQTT disconnected. Reason: " +
           disconnectReasonToString(reason));
 }
@@ -221,7 +221,7 @@ void EiMqtt::onMqttSubscribe(uint16_t packetId, uint8_t qos) {
   static int lastPacketID = 0;                                                  // MQTT starts packet IDs at 1
   static time_t lastMs = 0;
   if(lastPacketID == packetId && millis() - lastMs < 50) return;                // don't handle duplicates
-  logInfo(FN, LN, "Subscribe acknowledged.  packetId: " +
+  logInfo(LS, ET::MQTT, "Subscribe acknowledged.  packetId: " +
           String(int(packetId)) + ", qos: " + String(qos));
   lastMs = millis();
   lastPacketID = int(packetId);
@@ -230,7 +230,7 @@ void EiMqtt::onMqttSubscribe(uint16_t packetId, uint8_t qos) {
 /*---------------  ON MQTT UNSUBSCRIBE  ---------------*/
 
 void EiMqtt::onMqttUnsubscribe(uint16_t packetId) {
-  logInfo(FN, LN, "Unsubscribe acknowledged.  packetId: " + String(packetId));
+  logInfo(LS, ET::MQTT, "Unsubscribe acknowledged.  packetId: " + String(packetId));
 }
 
 /*---------------  ON MQTT MESSAGE  ---------------*/
@@ -249,27 +249,33 @@ void EiMqtt::onMqttMessage(char* topic,
 
 void EiMqtt::onMqttPublish(uint16_t packetId) {
   if(false) {                                                                 // debug
-    logInfo(FN, LN, "Publish acknowledged, packetId: " + String(packetId));   // log the action
+    logInfo(LS, ET::MQTT, "Publish acknowledged, packetId: " + String(packetId));   // log the action
   }
 }
 
 /*-----  ALLOW THE EXTERNAL CONFIGURATION OF THE MqttConfig STRUCT DATA  -----*/
 
 bool EiMqtt::configure(const MqttConfig& cfg) {
-  if (cfg.host.isEmpty()) {
-    logError(FN, LN, "MQTT host may not be empty.");
+  if (cfg.host.isEmpty()) {                                // Validate the configuration before accepting it.
+    logError(LS, ET::MQTT, "MQTT host may not be empty.");
     return false;
   }
   if (cfg.port == 0) {
-    logError(FN, LN, "Invalid MQTT port.");
+    logError(LS, ET::MQTT, "Invalid MQTT port.");
     return false;
   }
   _config = cfg;
   _config.dirty = true;
-  if (!writeCfgToDisk())
-      return false;
-  applyConfiguration();
+  if(!writeCfgToDisk()) {
+    logError(LS, ET::MQTT, "Unable to save MQTT configuration.");
+    return false;
+  }
   return true;
+}
+/*-----  ALLOW THE EXTERNAL AGENT TO SEE THE CONFIGURATION OF THE MqttConfig STRUCT DATA  -----*/
+
+const MqttConfig& EiMqtt::config() const {
+    return _config;
 }
 
 /*-----  DUMP THE CONTENTS OF _config TO THE LOGS  -----*/
@@ -279,7 +285,7 @@ void EiMqtt::dumpConfiguration() const {
   configToJson(doc);
   String json;
   serializeJsonPretty(doc, json);
-  logInfo(FN, LN, json);
+  logInfo(LS, ET::MQTT, json);
 }
 
 /*-----  PUT THE DISCONNECT REASON INTO A STRING  -----*/
@@ -289,7 +295,7 @@ String EiMqtt::disconnectReasonToString(AsyncMqttClientDisconnectReason reason) 
   case AsyncMqttClientDisconnectReason::TCP_DISCONNECTED:
     return "TCP disconnected";
   case AsyncMqttClientDisconnectReason::MQTT_SERVER_UNAVAILABLE:
-    return "Broker unavailable";
+    return "MQTT Host unavailable";
   // ...
   default:
     return "Unknown";
@@ -297,44 +303,20 @@ String EiMqtt::disconnectReasonToString(AsyncMqttClientDisconnectReason reason) 
   
 }
 
-/*-----  LOG INFO LOG MSG HELPER FUNCTION  -----*/
-
-void EiMqtt::logInfo(const char* function, int lineNum, const String& message) const {
-  logging.msg(__FILE__,
-              function,
-              lineNum,
-              T::EVENT,
-              L::INFO,
-              ET::MQTT,
-              message);
-  }
-
-/*-----  LOG ERROR LOG MSG HELPER FUNCTION  -----*/
-
-void EiMqtt::logError(const char* function, int lineNum, const String& message) const {
-  logging.msg(__FILE__,
-              function,
-              lineNum,
-              T::EVENT,
-              L::ERROR,
-              ET::MQTT,
-              message);
-}
-
 /*-----  SET THE MAXIMUM NUMBER OF MQTT SUBSCRIPTIONS  -----*/
 
 bool EiMqtt::setMaxSubCnt(uint16_t maxCnt) {
   if (_subscriptions != nullptr) {
-    logError(FN, LN, "Subscription table already allocated.");
+    logError(LS, ET::MQTT, "Subscription table already allocated.");
     return false;
   }
   if (maxCnt == 0) {
-    logError(FN, LN, "Maximum subscription count must be greater than zero.");
+    logError(LS, ET::MQTT, "Maximum subscription count must be greater than zero.");
     return false;
   }
   _subscriptions = new (std::nothrow) MqttSubscription[maxCnt];
   if (_subscriptions == nullptr) {
-    logError(FN, LN, "Unable to allocate MQTT subscription table. "
+    logError(LS, ET::MQTT, "Unable to allocate MQTT subscription table. "
              "MQTT subsystem disabled.");
     _state.operational = false;
     return false;
@@ -347,11 +329,11 @@ bool EiMqtt::setMaxSubCnt(uint16_t maxCnt) {
 
 bool EiMqtt::addSubscription(const String& name, const String& topic, uint8_t qos) {
   if (_subscriptions == nullptr) {
-    logError(FN, LN, "Call setMaxSubCnt() before addSubscription().");
+    logError(LS, ET::MQTT, "Call setMaxSubCnt() before addSubscription().");
     return false;
   }
   if (_subCnt >= _maxSubCnt) {
-    logError(FN, LN, "Maximum subscription count exceeded.");
+    logError(LS, ET::MQTT, "Maximum subscription count exceeded.");
     return false;
   }
   _subscriptions[_subCnt].name  = name;
@@ -388,8 +370,96 @@ void EiMqtt::dumpConfig() const
     Serial.printf("dirty    : %s\n", _config.dirty ? "true" : "false");
     Serial.printf("host     : '%s'\n", _config.host.c_str());
     Serial.printf("port     : %u\n", _config.port);
-    Serial.printf("username : '%s'\n", _config.username.c_str());
-    Serial.printf("password : '%s'\n", _config.password.c_str());
+    Serial.printf("brokerUser : '%s'\n", _config.brokerUser.c_str());
+    Serial.printf("brokerPwd : '%s'\n", _config.brokerPwd.c_str());
     Serial.println("========================================");
     Serial.println();
+}
+
+/*-----  PUBLIC: ALLOW EXTERNAL AGENT TO SEND A NEW MQTT CFG IN  -----*/
+
+bool EiMqtt::configureFromJson(const JsonDocument& doc) {
+    MqttConfig cfg = _config;
+    if (doc["mqttServer"].is<String>())
+      cfg.host = doc["mqttServer"].as<String>();
+    if (doc["mqttPort"].is<int>())
+        cfg.port = doc["mqttPort"].as<int>();
+    if (doc["mqttUser"].is<String>())
+        cfg.brokerUser = doc["mqttUser"].as<String>();
+    if (doc["mqttPass"].is<String>())
+        cfg.brokerPwd = doc["mqttPass"].as<String>();
+    return configure(cfg);
+}
+
+//-----------------------------------------------------------------------------
+// Public Logging API
+//
+// These wrappers are the official logging interface for both the
+// EmbeddedInfrastructure library and applications.
+//
+// They provide a simple logging interface while automatically supplying
+// the log record type and severity. The caller supplies the source
+// location (LS), event category (ET::...), and message.
+//
+// Do not remove. These functions are part of the library's public API.
+//-----------------------------------------------------------------------------
+
+void logDebug(const char* file,
+              const char* function,
+              int line,
+              const char* eventType,
+              const String& msg)
+{
+    logging.msg(file,
+                function,
+                line,
+                T::EVENT,
+                L::DEBUG,
+                eventType,
+                msg);
+}
+
+void logInfo(const char* file,
+             const char* function,
+             int line,
+             const char* eventType,
+             const String& msg)
+{
+    logging.msg(file,
+                function,
+                line,
+                T::EVENT,
+                L::INFO,
+                eventType,
+                msg);
+}
+
+void logWarn(const char* file,
+             const char* function,
+             int line,
+             const char* eventType,
+             const String& msg)
+{
+    logging.msg(file,
+                function,
+                line,
+                T::EVENT,
+                L::WARN,
+                eventType,
+                msg);
+}
+
+void logError(const char* file,
+              const char* function,
+              int line,
+              const char* eventType,
+              const String& msg)
+{
+    logging.msg(file,
+                function,
+                line,
+                T::EVENT,
+                L::ERROR,
+                eventType,
+                msg);
 }

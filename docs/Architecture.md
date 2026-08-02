@@ -95,17 +95,20 @@ Separating mechanism from policy allows infrastructure components to remain reus
 
 ### Component Design
 
-Each component shall have one clearly defined primary responsibility.
+- Each component shall have one clearly defined primary responsibility.
 
-As the infrastructure evolves, new functionality should be placed into the component whose responsibility most naturally includes it. If new functionality does not clearly belong to an existing component, a new component should be created rather than expanding an unrelated one.
+- As the infrastructure evolves, new functionality should be placed into the component whose responsibility most naturally includes it. If new functionality does not clearly belong to an existing component, a new component should be created rather than expanding an unrelated one.
 
-Large "utility" or "common" modules should be viewed as indicators that architectural refactoring is needed.
+- Large "utility" or "common" modules should be viewed as indicators that architectural refactoring is needed.
 
-Components should remain cohesive, focused, and easy to understand.
+- Components should remain cohesive, focused, and easy to understand.
 
-Whenever possible, components should expose a small, well-defined public interface while hiding their implementation details.
+- Whenever possible, components should expose a small, well-defined public interface while hiding their implementation details.
 
 A component should be understandable by reading only its public interface and its documented responsibilities.
+
+#### The Web subsystem supports a single active file upload at a time.
+- File uploads are intended for maintenance and configuration activities, not high-throughput file serving. If an upload is already in progress, additional upload requests are rejected until the current upload completes.
 
 ---
 

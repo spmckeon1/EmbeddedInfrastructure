@@ -49,15 +49,15 @@ bool EiNetwork::setup()     // This phase may not depend on services provided by
 
 bool EiNetwork::startup()
 {
-  logInfo(FN, LN, "Initializing Network infrastructure...");
+  logInfo(LS, ET::NETWORK, "Initializing Network infrastructure...");
   storage.ensureFileExists(_configFileName,                           // Ensure the configuration file exists.
                          createConfigJson(_config), LN);
   if (!readConfigFromDisk()) {                                          // Load persisted configuration.
-    logError(FN, LN, "Unable to load disk config layout.");
+    logError(LS, ET::NETWORK, "Unable to load disk config layout.");
     return false;
   }
   if (!validateConfiguration()) {                                     // Validate configuration for logging purposes.
-    logError(FN, LN,                                                  // An unprovisioned device is not a startup failure.
+    logError(LS, ET::NETWORK,                                                  // An unprovisioned device is not a startup failure.
              "Network configuration is empty or unprovisioned.");
   }
   wm.setConfigPortalBlocking(false);                                      // 1. Prevent WiFiManager from halting your loop
@@ -66,9 +66,9 @@ bool EiNetwork::startup()
   wm.setClass("invert");                                                  // 4. Custom Styling
   wm.setCustomHeadElement(
     "<style>body{background-color:#121212; color:#ffffff;}</style>");
-  logInfo(FN, LN, "Starting WiFiManager...");                             // Start the connection process.
+  logInfo(LS, ET::NETWORK, "Starting WiFiManager...");                             // Start the connection process.
   wm.autoConnect(appIDs.accessPointName);                                 // 5. Fire off the background connection/portal attempt, This returns instantly instead of waiting for a connection
-  logInfo(FN, LN, "Network subsystem started.");
+  logInfo(LS, ET::NETWORK, "Network subsystem started.");
   return true;
 }
 
@@ -94,7 +94,7 @@ void EiNetwork::onWifiGotIP(WiFiEventInfo_t info) {
     _config.password = WiFi.psk(); // Pulls the cached network key/passphrase
     _config.dirty = true;
   }
-  logInfo(FN, LN, "Event 7: Network connection verified. Active IP: " + _state.sta.ipAddress);
+  logInfo(LS, ET::NETWORK, "Event 7: Network connection verified. Active IP: " + _state.sta.ipAddress);
   eiEvents.notify(EiEvent::WifiConnected);
 }
 
@@ -105,39 +105,11 @@ void EiNetwork::onWifiDisconnect(WiFiEventInfo_t info) {
   _state.sta.connected = false;
   _state.sta.ipAddress = "";
   _state.sta.ssid = "";
-  logError(FN, LN, "Event 5: Router connection lost. Reason code: " + String(reason));
+  logError(LS, ET::NETWORK, "Event 5: Router connection lost. Reason code: " + String(reason));
   eiEvents.notify(EiEvent::WifiDisconnected);
 }
 
-/*---------------  PUT THE RIGHT  DERS INTO A NETWORK INFO LOG  ---------------*/
 
-void EiNetwork::logInfo(const char* function,
-                      int lineNum,
-                      const String& msg)
-{
-    logging.msg(__FILE__,
-                function,
-                lineNum,
-                T::SYSLOG,
-                L::INFO,
-                ET::NETWORK,
-                msg);
-}
-
-/*---------------  PUT THE RIGHT HEADERS INTO A NETWORK ERROR LOG  ---------------*/
-
-void EiNetwork::logError(const char* function,
-                      int lineNum,
-                      const String& msg)
-{
-    logging.msg(__FILE__,
-                function,
-                lineNum,
-                T::SYSLOG,
-                L::ERROR,
-                ET::NETWORK,
-                msg);
-}
 
 /*
 * WiFi Events
@@ -259,7 +231,7 @@ void EiNetwork::aWiFiEvent(WiFiEvent_t event) {
       break;
     default: response += "Received an unknown WiFi event.";
   }
-    logInfo(FN, LN, response);
+    logInfo(LS, ET::NETWORK, response);
 }
 
 /*-------------------------  LOAD NET CREDENTIALS FROM DISK  -------------------------*/
@@ -275,17 +247,22 @@ bool EiNetwork::readConfigFromDisk() {
 
 /*-------------------------  WRITE THE _config SSID AND PWD TO DISK  -------------------------*/
 
-Storage::WriteResult EiNetwork::writeConfigToDisk() {
+Storage::WriteResult EiNetwork::writeConfigToDisk()
+{
     JsonDocument doc;
     doc["ssid"]     = _config.ssid;
     doc["password"] = _config.password;
 
-  Storage::WriteResult result =  storage.writeJsonFile(_configFileName.c_str(), doc, LN);
-  if(result == Storage::WriteResult::Success) {
-    _config.dirty = false;
-  }
-}
+    Storage::WriteResult result =
+        storage.writeJsonFile(_configFileName.c_str(), doc, LN);
 
+    if (result == Storage::WriteResult::Success)
+    {
+        _config.dirty = false;
+    }
+
+    return result;
+}
 /*-----  CREATE THE CONFIG JSON OBJECT FROM THE cfg CONTENTS  -----*/
 
 JsonDocument EiNetwork::createConfigJson(const NetworkConfig& cfg) const {
@@ -301,7 +278,7 @@ bool EiNetwork::checkHardware() {
   uint8_t mac_bytes[6];
   esp_err_t err = esp_efuse_mac_get_default(mac_bytes);               // Reads the factory-burned base MAC address directly from eFuse
   if (err != ESP_OK) {
-    logError(FN, LN, "Wi-Fi hardware driver failed to initialize.");
+    logError(LS, ET::NETWORK, "Wi-Fi hardware driver failed to initialize.");
     return false;
   }
   char mac_str[18];                                                     // Format bytes into a standard MAC string for validation
@@ -309,11 +286,11 @@ bool EiNetwork::checkHardware() {
            mac_bytes[0], mac_bytes[1], mac_bytes[2], mac_bytes[3], mac_bytes[4], mac_bytes[5]);
   String mac = String(mac_str);
   if (mac == "00:00:00:00:00:00" || mac.length() == 0) {
-    logError(FN, LN, "Wi-Fi hardware check failed: Invalid MAC address.");
-    logInfo(FN, LN, "MAC address returned: '" + mac + "'");
+    logError(LS, ET::NETWORK, "Wi-Fi hardware check failed: Invalid MAC address.");
+    logInfo(LS, ET::NETWORK, "MAC address returned: '" + mac + "'");
     return false;
   }
-  logInfo(FN, LN, "Wi-Fi hardware is verified and ready. MAC: " + mac);
+  logInfo(LS, ET::NETWORK, "Wi-Fi hardware is verified and ready. MAC: " + mac);
   return true;
 }
 
@@ -321,21 +298,21 @@ bool EiNetwork::checkHardware() {
 
   bool EiNetwork::validateConfiguration() {
       if (_config.ssid.isEmpty()) {
-        logError(FN, LN, "Network SSID is not configured.");
+        logError(LS, ET::NETWORK, "Network SSID is not configured.");
           return false;
       }
       // WPA2 passwords must be at least 8 characters.
       // Allow empty passwords in case the user intentionally connects
       // to an open network.
       if (!_config.password.isEmpty() && _config.password.length() < 8) {
-        logError(FN, LN, "Wi-Fi password must be at least 8 characters.");
+        logError(LS, ET::NETWORK, "Wi-Fi password must be at least 8 characters.");
         return false;
       }
 
       return true;
   }
 
-
+/*
 void EiNetwork::saveConfigCallback() {
     // 1. Log that the user submitted data
     network.logInfo(__FUNCTION__, __LINE__, "New Wi-Fi credentials submitted via portal!");
@@ -358,7 +335,7 @@ void EiNetwork::saveConfigCallback() {
         network.logError(__FUNCTION__, __LINE__, "Failed writing new credentials to disk.");
     }
 }
-
+*/
 /*-----  IS WIFI CONNECTED  -----*/
 
 bool EiNetwork::isConnected() const {
@@ -370,3 +347,64 @@ bool EiNetwork::isConnected() const {
 String EiNetwork::getIPAddress() const {
     return _state.sta.ipAddress;
 }
+
+/*-----  PUBLIC: ALLOW EXTERNAL AGENT TO SEND A NEW NETWORK WIFI CFG IN  -----*/
+
+bool EiNetwork::configure(const NetworkConfig& cfg) {
+  if (cfg.ssid.isEmpty()) {                             // Validate the configuration before accepting it.
+    logError(LS, ET::NETWORK, "WiFi SSID may not be empty.");
+    return false;
+  }
+  _config = cfg;
+  _config.dirty = true;
+  Storage::WriteResult result = writeConfigToDisk();
+  if (result != Storage::WriteResult::Success) {
+    logError(LS, ET::NETWORK, "Unable to save network configuration.");
+    return false;
+  }
+  return true;
+}
+
+/*-----  PUBLIC: ALLOW EXTERNAL AGENT TO SEND A NEW NETWORK WIFI JSON DOC IN  -----*/
+
+bool EiNetwork::configureFromJson(const JsonDocument& doc) {
+  NetworkConfig cfg = _config;
+  if (doc["networkSsid"].is<String>())
+    cfg.ssid = doc["networkSsid"].as<String>();
+  if (doc["networkPass"].is<String>())
+    cfg.password = doc["networkPass"].as<String>();
+  return configure(cfg);
+}
+
+/*-----  PUBLIC: ALLOW EXTERNAL AGENT SEE THE NETWORK WIFI CFG  -----*/
+
+const NetworkConfig& EiNetwork::config() const {
+    return _config;
+}
+
+
+
+void EiNetwork::saveConfigCallback()
+{
+    logInfo(LS, ET::NETWORK, "New Wi-Fi credentials submitted via portal!");
+
+    NetworkConfig cfg = network._config;
+    network.updateConfigFromWiFiManager(cfg);
+
+    if (network.configure(cfg))
+    {
+        logInfo(LS, ET::NETWORK, "Successfully saved new network credentials to disk.");
+    }
+    else
+    {
+        logError(LS, ET::NETWORK, "Failed writing new credentials to disk.");
+    }
+}
+
+void EiNetwork::updateConfigFromWiFiManager(NetworkConfig& cfg)
+{
+    cfg.ssid     = wm.getWiFiSSID();
+    cfg.password = wm.getWiFiPass();
+    cfg.dirty    = true;
+}
+

@@ -102,7 +102,10 @@ public:
   bool evtLoop();
   bool isConnected() const;
   String getIPAddress() const;
-
+  const NetworkConfig& config() const;
+  bool configureFromJson(const JsonDocument& doc);
+  bool configure(const NetworkConfig& cfg);
+  
 private:
   NetworkConfig _config;
   NetworkState _state;;
@@ -116,18 +119,13 @@ private:
   void onWifiGotIP(WiFiEventInfo_t info);
   void onWifiDisconnect(WiFiEventInfo_t info);
   
-  void logInfo(const char* function,
-               int lineNum,
-               const String& msg);
-  void logError(const char* function,
-                int lineNum,
-                const String& msg);
   bool readConfigFromDisk();
-  Storage::WriteResult writeConfigToDisk();
   JsonDocument createConfigJson(const NetworkConfig& cfg) const;
   bool checkHardware();
   bool validateConfiguration();
   static void saveConfigCallback();
+  void updateConfigFromWiFiManager(NetworkConfig& cfg);
+  Storage::WriteResult writeConfigToDisk();
 };
 
 extern EiNetwork network;

@@ -6,6 +6,7 @@
 #include <ei_network.h>
 #include <ei_time.h>
 #include <ei_system.h>
+#include <ei_web.h>
 
 EiSystem eiSystem;
 
@@ -25,6 +26,7 @@ bool EiSystem::setup() {
   if(!network.setup()) return false;
   if(!eiTime.setup()) return false;
   if(!mqtt.setup()) return false;
+  if(!web.startup()) return false;
   // add more as available
   return true;
 }

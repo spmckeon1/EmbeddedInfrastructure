@@ -321,8 +321,8 @@ static const char PROGMEM webPgWiFiSetup[] = R"rawliteral(
 
      function saveCfgData() {
         let configData = {
-          ssid: ssid.trim(),
-          pass: ssidPwd.trim(),
+          networkSsid: ssid.trim(),
+          networkPass: ssidPwd.trim(),
           mqttServer: MQTT_serverIP.trim(),
           mqttPort: parseInt(MQTT_port),
           mqttUser: MQTT_brokerUsr.trim(),

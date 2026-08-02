@@ -26,7 +26,33 @@
 #define FI __FILE__           // compiler get file name
 #define FN __func__           // compiler get function name
 #define LN __LINE__           // what line was the compiler on
+#define LS __FILE__, __func__, __LINE__
 
+
+
+void logDebug(const char* file,
+              const char* function,
+              int line,
+              const char* eventType,
+              const String& msg);
+
+void logInfo(const char* file,
+             const char* function,
+             int line,
+             const char* eventType,
+             const String& msg);
+
+void logWarn(const char* file,
+             const char* function,
+             int line,
+             const char* eventType,
+             const String& msg);
+
+void logError(const char* file,
+              const char* function,
+              int line,
+              const char* eventType,
+              const String& msg);
 
 namespace T {           // Type
   enum Type {
@@ -81,6 +107,8 @@ namespace ET
   inline constexpr const char MQTT[]      = "MQTT";
   inline constexpr const char WIFI[]      = "WIFI";
   inline constexpr const char TIME[]      = "TIME";
+  inline constexpr const char OTA[]       = "OTA";
+  inline constexpr const char WEB[]       = "WEB";
 
   inline constexpr const char SENSOR[]    = "SENSOR";
 
@@ -133,12 +161,6 @@ private:
                                const char* eventType,
                                const String& message);
   bool sendToNodeRedLogging(const String& logEntry);
-  void logInfo(const char* function,
-               int lineNum,
-               const String& msg);
-  void logError(const char* function,
-                int lineNum,
-                const String& msg);
   const char* baseFileName(const char* file);
   
 

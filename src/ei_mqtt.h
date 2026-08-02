@@ -28,11 +28,10 @@
 struct MqttConfig {
   String host;
   uint16_t port = 1883;
-  String username;
-  String password;
+  String brokerUser;
+  String brokerPwd;
   bool dirty = false;
 };
-
 struct MqttState {
   bool operational = true;
   bool connected = false;
@@ -54,12 +53,15 @@ public:
   bool evtLoop();
   bool startup();
   bool setup();
-  bool configure(const MqttConfig& cfg);
   bool mqttPubMsg(const String& topic, uint8_t qos, boolean retain, const char* message, int from);
   bool mqttPubMsg(const String& topic, uint8_t qos, boolean retain, const String& message, int from);
   bool setMaxSubCnt(uint16_t maxCnt);
   bool addSubscription(const String& name, const String& topic, uint8_t qos);
   bool connected() const;
+  bool configure(const MqttConfig& cfg);
+  bool configureFromJson(const JsonDocument& doc);
+  const MqttConfig& config() const;
+
 private:
   MqttConfig _config;
   MqttState  _state;
@@ -91,13 +93,6 @@ private:
                      size_t total);
   void onMqttPublish(uint16_t packetId);
   String disconnectReasonToString(AsyncMqttClientDisconnectReason reason) const;
-  void logInfo(const char* function,
-               int lineNum,
-               const String& message) const;
-  
-  void logError(const char* function,
-                int lineNum,
-                const String& message) const;
   bool addSubscriptions();
   void dumpConfig() const;
   

@@ -22,11 +22,11 @@ bool Logging::evtLoop() {
 
 void Logging::startup() {
   Serial.begin(115200);                                                         // set the serial port speed
-  logInfo(FN, LN, dividerStr(FN, LN));
-  logInfo(FN, LN, dividerStr(FN, LN));
-  logInfo(FN, LN, "Starting boot process." );
-  logInfo(FN, LN, "Serial started at 115200");
-  logInfo(FN, LN, "Starting the Logging service");
+  logInfo(LS, ET::LOGGING, dividerStr(FN, LN));
+  logInfo(LS, ET::LOGGING, dividerStr(FN, LN));
+  logInfo(LS, ET::LOGGING, "Starting boot process." );
+  logInfo(LS, ET::LOGGING, "Serial started at 115200");
+  logInfo(LS, ET::LOGGING, "Starting the Logging service");
 }
 
 /*-----  FORMAT LOG ENTRY FOR THE SERIAL MONITOR  -----*/
@@ -166,7 +166,7 @@ String L::toStr(Level level) {
 
 void Logging::setDestination(LogDestination destination) {
   _dest = destination;
-  logInfo(FN, LN, "Logging destination has been chaged to: " + String(destinationToString(_dest)));
+  logInfo(LS, ET::LOGGING, "Logging destination has been chaged to: " + String(destinationToString(_dest)));
 }
 
 /*-----  GET THE PRINTABLE VALUE OF _dest  -----*/
@@ -179,36 +179,6 @@ const char* Logging::destinationToString(LogDestination dest) const
         case LogDestination::MqttServer: return "MqttServer";
         default:                        return "Unknown";
     }
-}
-
-/*---------------  PUT THE RIGHT HEADERS INTO A STORAGE INFO LOG  ---------------*/
-
-void Logging::logInfo(const char* function,
-                      int lineNum,
-                      const String& msg)
-{
-    logging.msg(__FILE__,
-                function,
-                lineNum,
-                T::SYSLOG,
-                L::INFO,
-                ET::LOGGING,
-                msg);
-}
-
-/*-----  PUT THE RIGHT HEADERS INTO A STORAGE ERROR LOG  -----*/
-
-void Logging::logError(const char* function,
-                      int lineNum,
-                      const String& msg)
-{
-    logging.msg(__FILE__,
-                function,
-                lineNum,
-                T::SYSLOG,
-                L::ERROR,
-                ET::LOGGING,
-                msg);
 }
 
 /*-----  SHORTEN THE FQN TO THE DESIRED COMPONENT(S)  -----*/
@@ -288,4 +258,44 @@ bool Logging::flushPendingLogs() {
     return false;
   }
   return true;
+}
+
+void logDebug(const char* file,
+              const char* function,
+              int line,
+              const char* eventType,
+              const String& msg)
+{
+    logging.msg(file, function, line,
+                T::EVENT, L::DEBUG, eventType, msg);
+}
+
+void logInfo(const char* file,
+             const char* function,
+             int line,
+             const char* eventType,
+             const String& msg)
+{
+    logging.msg(file, function, line,
+                T::EVENT, L::INFO, eventType, msg);
+}
+
+void logWarn(const char* file,
+             const char* function,
+             int line,
+             const char* eventType,
+             const String& msg)
+{
+    logging.msg(file, function, line,
+                T::EVENT, L::WARN, eventType, msg);
+}
+
+void logError(const char* file,
+              const char* function,
+              int line,
+              const char* eventType,
+              const String& msg)
+{
+    logging.msg(file, function, line,
+                T::EVENT, L::ERROR, eventType, msg);
 }

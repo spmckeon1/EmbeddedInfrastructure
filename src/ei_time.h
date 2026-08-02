@@ -26,6 +26,12 @@
 #include <ei_types.h>
 #include <ei_storage.h>
 
+enum class DurFormat {
+    COMPACT,
+    PRETTY,
+    VERBOSE
+};
+
 struct TimeConfig {       // Default to U.S. Mountain Time. Applications may override as needed.
   bool dirty = true;
   String posixRule = "MST7MDT,M3.2.0,M11.1.0";
@@ -58,7 +64,7 @@ public:
   String getLogTimeStamp();
   time_t now();
   bool setPosixRule(const String& rule);
-  String formatDuration(unsigned long milliseconds) const;
+  String formatDuration(uint32_t ms, DurFormat format);
   time_t getBootTime() const;
 
 private:
@@ -75,12 +81,6 @@ private:
   JsonDocument createConfigJson(const TimeConfig& cfg) const;
   void loadConfigFromJson(const JsonDocument& doc, TimeConfig& cfg) const;
   bool validateConfiguration(const TimeConfig& cfg);
-  void logInfo(const char* function,
-               int lineNum,
-               const String& msg) const;
-  void logError(const char* function,
-                int lineNum,
-                const String& msg) const;
   void saveBootTime();
   String formatLogTime();
   

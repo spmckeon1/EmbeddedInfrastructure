@@ -95,12 +95,10 @@ public:
   void getInfo(StorageInfo& info) const;
   WriteResult writeJsonFile(const char* path, const JsonDocument& doc, int from);
   bool readJsonFile(const char* path, JsonDocument& doc, int from);
-//  void writeLog(const String& logEntry);
+  bool exists(const char* path) const;
+  bool exists(const String& path) const;
 
 private:
-  static constexpr int MAX_RAM_LINES    = 150;      // RAM log
-  static constexpr int MAX_LOG_LINE_LEN = 256;
-  char _ramLog[MAX_RAM_LINES][MAX_LOG_LINE_LEN];
   StorageConfig _config;
   StorageState  _state;
   StorageStats  _stats;
@@ -118,12 +116,6 @@ private:
   #endif
   void refreshStats();
   void buildDirReport(String &report, const char *dirname, uint8_t levels);
-  void logInfo(const char* function,
-               int lineNum,
-               const String& msg);
-  void logError(const char* function,
-                int lineNum,
-                const String& msg);
 };
 
 // ============================================================================
