@@ -22,13 +22,20 @@ int updateProgress = 0;                                                 // keeps
 
 EiOTA ota;
 
+/*----- EiOTA SET UP -----*/
+
+bool EiOTA::setup() {
+  _updateHtmlFile = appDirs.htmlDir + "/firmwareUpdate.html";
+  return true;
+}
 /*----- EiOTA EVENT LOOP -----*/
 
 bool EiOTA::startup() {
-    return true;
+  return true;
 }
 
 void EiOTA::evtLoop() {
+  
 }
 
 

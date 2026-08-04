@@ -408,3 +408,8 @@ void EiNetwork::updateConfigFromWiFiManager(NetworkConfig& cfg)
     cfg.dirty    = true;
 }
 
+/*-----  PROCESS AN INCOMING MSG  -----*/
+
+void EiNetwork::processMsg(const JsonDocument& doc) {
+  
+}

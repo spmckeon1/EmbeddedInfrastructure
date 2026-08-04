@@ -66,6 +66,7 @@ public:
   bool setPosixRule(const String& rule);
   String formatDuration(uint32_t ms, DurFormat format);
   time_t getBootTime() const;
+  void processMsg(const JsonDocument& doc);
 
 private:
   String _configFileName;

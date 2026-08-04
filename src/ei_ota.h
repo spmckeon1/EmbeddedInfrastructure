@@ -21,6 +21,7 @@ struct OtaState
 
 class EiOTA {
 public:
+  bool setup();
   bool startup();
   void evtLoop();
 
@@ -34,6 +35,8 @@ public:
                       bool final);
 
 private:
+  String _updateHtmlFile;
+  
   OtaState _state;
   void printProgress(size_t prg, size_t sz);
 

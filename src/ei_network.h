@@ -105,6 +105,7 @@ public:
   const NetworkConfig& config() const;
   bool configureFromJson(const JsonDocument& doc);
   bool configure(const NetworkConfig& cfg);
+  void processMsg(const JsonDocument& doc);
   
 private:
   NetworkConfig _config;

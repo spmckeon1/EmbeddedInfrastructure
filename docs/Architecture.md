@@ -168,9 +168,45 @@ Arduino Libraries
         ▼
 ESP32 Hardware
 
-## Component Responsibilities
+## Communication Architecture
 
-Each component shall document the following:
+The EmbeddedInfrastructure communication architecture defines how information moves between external interfaces, library subsystems, and the application. Its primary goals are to preserve subsystem ownership, minimize coupling, and provide a consistent communication model regardless of whether a request originates from MQTT, the web interface, or another transport.
+
+### Message Ownership
+
+- Every incoming message has a single authoritative owner. Ownership is determined before the message is interpreted.
+
+- Library messages are owned by EmbeddedInfrastructure and are coordinated by the EiSystem subsystem. Application messages are owned entirely by the application.
+
+- Within the library, each subsystem owns the interpretation of messages addressed to it. No subsystem modifies or interprets another subsystem's configuration or runtime data.
+
+- This ownership model preserves subsystem independence while allowing new services to be added without affecting existing components.
+
+### Message Flow
+
+Communication is performed in layers. Transport-specific subsystems receive incoming messages, perform any protocol-specific processing, and then forward the message to its owner.
+
+#### Library messages
+- EiSystem coordinates the processing of the request and forwards it to the subsystem responsible for the requested service.
+
+#### Application messages
+
+- The library forwards the request directly to the application, allowing the application complete control over its own messaging protocol.
+
+The details of individual message formats and protocol requirements are defined separately from this architectural document.
+
+### System Coordination
+
+EiSystem coordinates operations that involve multiple library subsystems.
+
+Its responsibilities include coordinating subsystem startup, routing library-level requests to the appropriate subsystem, and managing operations that span subsystem boundaries.
+
+EiSystem does not implement protocol-specific behavior, own subsystem configuration, or perform subsystem-specific processing. Those responsibilities remain within the subsystem that owns the associated data and behavior.
+
+By separating coordination from implementation, EmbeddedInfrastructure maintains loose coupling while allowing each subsystem to evolve independently.
+
+
+## Each component shall document the following:
 
 - Purpose
 - Responsible For

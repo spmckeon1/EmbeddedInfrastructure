@@ -90,13 +90,14 @@ public:
   int getFileSize(const char * path);
   bool createDirIfNotExist(String dirName);
   EnsureFileResult ensureFileExists(const String& fileName, const JsonDocument& doc, int from);
+  bool exists(const char* path) const;
+  bool exists(const String& path) const;
   const char* fileSystemName() const;
   fs::FS& getFS();
   void getInfo(StorageInfo& info) const;
   WriteResult writeJsonFile(const char* path, const JsonDocument& doc, int from);
   bool readJsonFile(const char* path, JsonDocument& doc, int from);
-  bool exists(const char* path) const;
-  bool exists(const String& path) const;
+  void processMsg(const JsonDocument& doc);
 
 private:
   StorageConfig _config;

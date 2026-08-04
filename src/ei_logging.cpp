@@ -164,9 +164,15 @@ String L::toStr(Level level) {
 
 /*-----  PUBLIC INTERFACE TO CHANGE LOGGING DESTINATION  -----*/
 
-void Logging::setDestination(LogDestination destination) {
-  _dest = destination;
-  logInfo(LS, ET::LOGGING, "Logging destination has been chaged to: " + String(destinationToString(_dest)));
+void Logging::setDestination(LogDestination dest) {
+  if (_dest == dest)
+    return;
+  _dest = dest;
+  if (_dest == LogDestination::MqttServer) {
+    while (flushOnePendingLog()) {
+    }
+  }
+  logInfo(LS, ET::LOGGING, "Logging destination has been changed to: " + String(destinationToString(dest)));
 }
 
 /*-----  GET THE PRINTABLE VALUE OF _dest  -----*/
@@ -221,6 +227,7 @@ bool Logging::enqueuePendingLog(const String& jsonLog) {
 /*-----  REMOVE LOGS FROM THE HEAD TO THE TAIL  -----*/
 
 bool Logging::dequeuePendingLog(String& jsonLog) {
+  TRACE();
   if (pendingLogsEmpty())
     return false;
   jsonLog = _pendingLogQueue[_queueHead];             // Transfer ownership of the oldest pending log
@@ -230,26 +237,16 @@ bool Logging::dequeuePendingLog(String& jsonLog) {
   return true;
 }
 
-/*-----  SEND THE QUEUED LOGS TO NODE-RED 1 AT A TIME  -----*
-
-bool Logging::flushPendingLogs() {
-  String jsonLog;
-  while (dequeuePendingLog(jsonLog)) {
-    if (!sendToNodeRedLogging(jsonLog)) {
-      enqueuePendingLog(jsonLog);// Connection dropped again. Put this log back and stop trying.
-      return false;
-    }
-  }
-  return true;
-}
-
  /*-----  SEND THE 1 QUEUED LOG TO sendToNodeRedLogging()  -----*/
 
  bool Logging::flushOnePendingLog() {
-  if (pendingLogsEmpty())
-    return false;
-  if (!mqtt.connected())
-    return false;
+  if (pendingLogsEmpty()) {
+   return false;
+  }
+   if (!mqtt.connected()) {
+     return false;
+   }
+   TRACE();
   String jsonLog;
   if (!dequeuePendingLog(jsonLog))
     return false;
@@ -298,4 +295,9 @@ void logError(const char* file,
 {
     logging.msg(file, function, line,
                 T::EVENT, L::ERROR, eventType, msg);
+}
+
+uint8_t Logging::registerEventType(const char* name) {
+    static uint8_t nextEventType = 100;
+    return nextEventType++;
 }

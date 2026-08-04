@@ -21,17 +21,30 @@ AsyncWebSocket ws("/ws");
 
 Web web;
 
-/*-----    SDO THE Web STARTUP ACTIONS   -----*/
+/*-----    WHEN WIFI STARTS   -----*/
+
+static void onWifiConnected() {
+  web.start();
+}
+
+/*-----    START THE WEBSERVER   -----*/
+
+void Web::start() {
+  logInfo(LS, ET::WEB, "Starting web server...");
+  _server.begin();
+  logInfo(LS, ET::WEB, "Web server started.");
+}
+
+/*-----    DO THE Web STARTUP ACTIONS   -----*/
 
 bool Web::startup()
 {
-    if (!startWebServer())
-        return false;
-
-    if (!startWebSocket())
-        return false;
-
-    return true;
+  if (!startWebServer())
+      return false;
+  if (!startWebSocket())
+      return false;
+  eiEvents.on(EiEvent::WifiConnected, onWifiConnected);
+  return true;
 }
 
 /*-----    DO THE Web EVENT LOOP   -----*/
@@ -224,11 +237,11 @@ bool Web::startWebServer() {
           request->send(404, "text/plain", "404 - File Not Found");
       });
   
-  //  logInfo(LS, ET::WEB, "Starting web server...");
+  logInfo(LS, ET::WEB, "Starting web server...");
   //registerRoutes();                                               // Register built-in HTTP routes.
   //registerApplicationRoutes();                                    // Allow the application to register additional routes.
-  //_server.begin();                                                // Start accepting HTTP requests.
-  //logInfo(LS, ET::WEB, "Web server started.");
+  _server.begin();                                                // Start accepting HTTP requests.
+  logInfo(LS, ET::WEB, "Web server started.");
   return true;
 }
 
@@ -286,43 +299,33 @@ void Web::handlePostFile(AsyncWebServerRequest* request,
 }
 
 
-/*---------------  IF THE WEB SERER RECEIVES A REQUEST FOR A NON-DEFINED
+/*---------------  IF THE WEB SERVER RECEIVES A REQUEST FOR A NON-DEFINED
                    ROUTE THE SEE IF STORAGE HAS A FILE THAT MATCHES IT  ---------------*/
 
-bool Web::tryServeStaticFile(AsyncWebServerRequest *request)
-{
-    String path = request->url();
+bool Web::tryServeStaticFile(AsyncWebServerRequest *request) {
+  String path = request->url();
+  logInfo(LS, ET::WEB, "Static file request: '" + path + "' from " + request->client()->remoteIP().toString());
+  if (!storage.exists(path)) return false;
+  request->send(storage.getFS(), path, getContentType(path));
+  return true;
+}
 
-    // Optional compatibility with the old "/sendfile:" syntax.
-    if (path.startsWith("/sendfile:"))
-        path = path.substring(10);
+const char *Web::getContentType(const String &path) const {
+    if (path.endsWith(".html")) return "text/html";
+    if (path.endsWith(".css"))  return "text/css";
+    if (path.endsWith(".js"))   return "application/javascript";
+    if (path.endsWith(".json")) return "application/json";
+    if (path.endsWith(".txt"))  return "text/plain";
+    if (path.endsWith(".png"))  return "image/png";
+    if (path.endsWith(".jpg"))  return "image/jpeg";
+    if (path.endsWith(".gif"))  return "image/gif";
+    if (path.endsWith(".ico"))  return "image/x-icon";
 
-    logInfo(LS, ET::WEB,
-            "Static file request: '" + path +
-            "' from " + request->client()->remoteIP().toString());
+    return "application/octet-stream";
+}
 
-    if (!storage.exists(path))
-        return false;
+/*-----  PROCESS AN INCOMING MSG  -----*/
 
-    _downloadingFile = true;
-
-    String mimeType = getMimeType(path);
-
-    File file = storage.open(path, FILE_READ);
-
-    AsyncWebServerResponse *response =
-        request->beginChunkedResponse(
-            mimeType.c_str(),
-            [file](uint8_t *buffer,
-                   size_t maxLen,
-                   size_t index) -> size_t
-            {
-                return storage.loadData(file, buffer, maxLen, index);
-            });
-
-    response->addHeader("Server", "EmbeddedInfrastructure");
-
-    request->send(response);
-
-    return true;
+void Web::processMsg(const JsonDocument& doc) {
+  
 }

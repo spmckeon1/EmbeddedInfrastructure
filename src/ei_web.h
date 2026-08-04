@@ -16,14 +16,16 @@ class AsyncWebSocketClient;
 class Web
 {
 public:
+  void start();
   bool startup();
   void evtLoop();
   void setDownloadingFile(bool downloading) { _downloadingFile = downloading; }
   void sendWS_msg(const String& message, AsyncWebSocketClient* client);
   void hdlWiFiSetupEvent(String s,AsyncWebSocketClient* client);
   void initNewWiFiPg(String s, AsyncWebSocketClient *client);
-  bool downloadingFile() const;;
-
+  bool downloadingFile() const;
+  const char *getContentType(const String &path) const;
+  void processMsg(const JsonDocument& doc);
 
 private:
   AsyncWebServer _server{80};

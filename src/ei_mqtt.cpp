@@ -10,6 +10,7 @@
 #include <ei_network.h>
 #include <ei_storage.h>
 #include <ei_scheduler.h>
+#include <ei_system.h>
 #include <ei_mqtt.h>
 
 EiMqtt mqtt;
@@ -86,7 +87,6 @@ bool EiMqtt::setup() {
 /*-----  APPLY THE CINFIGURATION DATA TO THE AsyncMqttClient LIBRARY  -----*/
 
 void EiMqtt::applyConfiguration() {
-  dumpConfig();
   _client.setServer(_config.host.c_str(), _config.port);
   _client.setCredentials(_config.brokerUser.c_str(),
                          _config.brokerPwd.c_str());
@@ -233,6 +233,28 @@ void EiMqtt::onMqttUnsubscribe(uint16_t packetId) {
   logInfo(LS, ET::MQTT, "Unsubscribe acknowledged.  packetId: " + String(packetId));
 }
 
+/*---------------  PROCESS THE NEWLY ARRIVES MQTT MSG  ---------------*/
+
+void EiMqtt::processInboundMsg(const JsonDocument& doc) {
+  String owner = doc["owner"].as<String>();                     // Determine the owner of the message.
+  if (owner == "library") {                                     // Route library-owned messages.
+    eiSystem.handleMsg(doc);
+    return;
+  }
+  if (owner == "application") {                                 // Route application-owned messages.
+    appHandleMsg(doc);
+    return;
+  }
+  logError(LS, ET::MQTT, "Received MQTT message with unknown owner '" + owner + "'.");
+}
+/*---------------  HELPER TO LOG ERRORS ON M=MQTT MSG RECEIPT  ---------------*/
+
+void EiMqtt::missingField(const String& field, const String& json) {
+    logError(LS, ET::MQTT,
+             "MQTT message missing required field '" +
+             field + "'. Received: " + json);
+}
+
 /*---------------  ON MQTT MESSAGE  ---------------*/
 
 void EiMqtt::onMqttMessage(char* topic,
@@ -242,8 +264,36 @@ void EiMqtt::onMqttMessage(char* topic,
                            size_t index,
                            size_t total)
 {
-  
+  String json(payload, len);                                          // Build the incoming JSON string.
+  JsonDocument doc;                                                   // Parse the JSON.
+  DeserializationError err = deserializeJson(doc, json);
+  if (err) {
+      logError(LS, ET::MQTT, "Received invalid JSON. Error: " + String(err.c_str()) + ". Message: " + json);
+      return;
+  }
+  if (!doc["source"].is<const char*>()) {                               // Validate the required message fields.
+    missingField("source", json);
+    return;
+  }
+  if (!doc["scope"].is<const char*>()) {
+    missingField("scope", json);
+    return;
+  }
+  if (!doc["service"].is<const char*>()) {
+    missingField("service", json);
+    return;
+  }
+  if (!doc["command"].is<const char*>()) {
+    missingField("command", json);
+    return;
+  }
+  if (!doc["data"].is<JsonObject>()) {
+    missingField("data", json);
+    return;
+  }
+  processInboundMsg(doc);
 }
+
 
 /*---------------  ON MQTT PUBLISH  ---------------*/
 
@@ -325,9 +375,10 @@ bool EiMqtt::setMaxSubCnt(uint16_t maxCnt) {
   _subCnt    = 0;
   return true;
 }
-/*-----  ALLOW THE APP TO ADD SUBSCRIPTIONS  -----*/
 
-bool EiMqtt::addSubscription(const String& name, const String& topic, uint8_t qos) {
+/*-----  ADD REQUESTED SUBSCRIPTIONS  -----*/
+
+bool EiMqtt::addAppMQTTSubscriptions(const String& name, const String& topic, uint8_t qos) {
   if (_subscriptions == nullptr) {
     logError(LS, ET::MQTT, "Call setMaxSubCnt() before addSubscription().");
     return false;
@@ -391,75 +442,31 @@ bool EiMqtt::configureFromJson(const JsonDocument& doc) {
     return configure(cfg);
 }
 
-//-----------------------------------------------------------------------------
-// Public Logging API
-//
-// These wrappers are the official logging interface for both the
-// EmbeddedInfrastructure library and applications.
-//
-// They provide a simple logging interface while automatically supplying
-// the log record type and severity. The caller supplies the source
-// location (LS), event category (ET::...), and message.
-//
-// Do not remove. These functions are part of the library's public API.
-//-----------------------------------------------------------------------------
+/*-----  TRANSLATE BETWEEN OWNER STRING AND OWNER ENUM  -----*/
 
-void logDebug(const char* file,
-              const char* function,
-              int line,
-              const char* eventType,
-              const String& msg)
-{
-    logging.msg(file,
-                function,
-                line,
-                T::EVENT,
-                L::DEBUG,
-                eventType,
-                msg);
+EiMqtt::Owner EiMqtt::ownerFromString(const char* s) {
+    if (strcmp(s, "library") == 0)
+        return Owner::Library;
+    if (strcmp(s, "application") == 0)
+        return Owner::Application;
+    return Owner::Unknown;
 }
 
-void logInfo(const char* file,
-             const char* function,
-             int line,
-             const char* eventType,
-             const String& msg)
-{
-    logging.msg(file,
-                function,
-                line,
-                T::EVENT,
-                L::INFO,
-                eventType,
-                msg);
+/*-----  TRANSLATE BETWEEN OWNER ENUM AND OWNER STRING  -----*/
+
+const char* EiMqtt::ownerToString(Owner owner) {
+    switch (owner) {
+    case Owner::Library:
+        return "library";
+    case Owner::Application:
+        return "application";
+    default:
+        return "unknown";
+    }
 }
 
-void logWarn(const char* file,
-             const char* function,
-             int line,
-             const char* eventType,
-             const String& msg)
-{
-    logging.msg(file,
-                function,
-                line,
-                T::EVENT,
-                L::WARN,
-                eventType,
-                msg);
-}
+/*-----  PROCESS AN INCOMING MSG  -----*/
 
-void logError(const char* file,
-              const char* function,
-              int line,
-              const char* eventType,
-              const String& msg)
-{
-    logging.msg(file,
-                function,
-                line,
-                T::EVENT,
-                L::ERROR,
-                eventType,
-                msg);
+void EiMqtt::processMsg(const JsonDocument& doc) {
+  
 }

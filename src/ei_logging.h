@@ -109,6 +109,7 @@ namespace ET
   inline constexpr const char TIME[]      = "TIME";
   inline constexpr const char OTA[]       = "OTA";
   inline constexpr const char WEB[]       = "WEB";
+  inline constexpr const char SYSTEM[]    = "SYSTEM";
 
   inline constexpr const char SENSOR[]    = "SENSOR";
 
@@ -134,6 +135,7 @@ enum class LogDestination {
 
 class Logging {
 private:
+
   LoggingConfig _config;
   LogDestination _dest = LogDestination::RamBuffer;
   

@@ -68,6 +68,7 @@ bool EiTime::setTimeZone() {
 /*-----  TAKE CARE OFF ALL THE ACTIONS NECESSAY TO ENSURE IETIME HAS WHAT IT NEEDS TO RUN  -----*/
 
 bool EiTime::setup() {
+  TRACE();
   JsonDocument doc;
   _configFileName = appDirs.libCfgDir + "/ei_timeCfg.json";
   doc = createConfigJson(_config);
@@ -274,4 +275,10 @@ String EiTime::formatDuration(uint32_t ms, DurFormat format) {
   }
 
   return "";
+}
+
+/*-----  PROCESS AN INCOMING MSG  -----*/
+
+void EiTime::processMsg(const JsonDocument& doc) {
+  
 }

@@ -368,7 +368,7 @@ void Storage::renameFile(const char * path1, const char * path2) {
   }
 }
 
-/*---------------  DELETE FILE  ID 132---------------*/
+/*---------------  DELETE FILE  ---------------*/
 
 void Storage::deleteFile(const char * path, int from) {
  
@@ -474,6 +474,18 @@ Storage::EnsureFileResult Storage::ensureFileExists(const String& fileName, cons
   return EnsureFileResult::Created;
 }
 
+/*---------------  PUBLIC - DOES THIS FILE EXIST IN THE FILE SYSTEM (String)  ---------------*/
+
+bool Storage::exists(const String& path) const {
+  return _fs->exists(path);
+}
+
+/*---------------  PUBLIC - DOES THIS FILE EXIST IN THE FILE SYSTEM (char)  ---------------*/
+
+bool Storage::exists(const char* path) const {
+  return _fs->exists(path);
+}
+
 /*---------------  GET RAW FILESYSTEM REFERENCE  ---------------*/
 
 fs::FS& Storage::getFS() {
@@ -551,16 +563,8 @@ bool Storage::readJsonFile(const char* path, JsonDocument& doc, int from) {
   return true;
 }
 
-/*-----  WRITE A LOGGING EVENT TO THE RAM DISK  -----*
+/*-----  PROCESS AN INCOMING MSG  -----*/
 
-void Storage::writeLog(const String& logEntry) {
-  strncpy(_ramLog[_writeIndex], logEntry.c_str(), MAX_LOG_LINE_LEN - 1);
-  _ramLog[_writeIndex][MAX_LOG_LINE_LEN - 1] = '\0';
-  _writeIndex++;
-  if (_writeIndex >= MAX_RAM_LINES) {
-    _writeIndex = 0;
-    _wrapped = true;
-  }
+void Storage::processMsg(const JsonDocument& doc) {
+  
 }
-
-*/

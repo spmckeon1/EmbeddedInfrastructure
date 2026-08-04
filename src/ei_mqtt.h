@@ -61,8 +61,16 @@ public:
   bool configure(const MqttConfig& cfg);
   bool configureFromJson(const JsonDocument& doc);
   const MqttConfig& config() const;
+  void processMsg(const JsonDocument& doc);
+  bool addAppMQTTSubscriptions(const String& name, const String& topic, uint8_t qos);
 
 private:
+  enum class Owner {
+    Unknown,
+    Library,
+    Application
+  };
+
   MqttConfig _config;
   MqttState  _state;
   MqttStats  _stats;
@@ -85,6 +93,8 @@ private:
   void onMqttSubscribe(uint16_t packetId, uint8_t qos);
   void onMqttUnsubscribe(uint16_t packetId);
   void dumpConfiguration() const;
+  void processInboundMsg(const JsonDocument& doc);
+  void missingField(const String& field, const String& json);
   void onMqttMessage(char* topic,
                      char* payload,
                      AsyncMqttClientMessageProperties properties,
@@ -95,8 +105,11 @@ private:
   String disconnectReasonToString(AsyncMqttClientDisconnectReason reason) const;
   bool addSubscriptions();
   void dumpConfig() const;
-  
+  Owner ownerFromString(const char* s);
+  const char* ownerToString(Owner owner);
+
 };
 
 extern EiMqtt mqtt;
 
+extern void appHandleMsg(const JsonDocument& doc);
