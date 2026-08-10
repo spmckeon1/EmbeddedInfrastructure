@@ -327,5 +327,70 @@ const char *Web::getContentType(const String &path) const {
 /*-----  PROCESS AN INCOMING MSG  -----*/
 
 void Web::processMsg(const JsonDocument& doc) {
-  
+  eiSystem.processExternalMsg(doc, Source::WEB);
 }
+
+/*-----  ADD THE NEW CLIENT TRACKING INFORMATION  -----*/
+
+WebClient* Web::addClient(AsyncWebSocketClient* client) {
+  WebClient* wc = findFreeClient();                       // Find an unused slot
+  if (wc == nullptr)
+    return nullptr;                                       // No room for another client
+  wc->client        = client;
+  wc->clientId      = client->id();
+  wc->ip            = client->remoteIP();
+  wc->connectedAt   = eiTime.now();
+  wc->lastActivity  = wc->connectedAt;
+
+    // pgName intentionally left blank until registration
+
+    return wc;
+}
+
+/*-----  FIND THE FIRST EMPTY _clients STRUCT AND RETURN IT  -----*/
+
+WebClient* Web::findFreeClient() {
+
+    for (uint8_t i = 0; i < MAX_WEB_CLIENTS; i++) {
+        if (_clients[i].client == nullptr)
+            return &_clients[i];
+    }
+
+    return nullptr;
+}
+
+/*-----  FIND THE CLIENT DATA BY USING THE CLIENT ID AND RETURN ITS STRUCT  -----*/
+
+WebClient* Web::findClient(AsyncWebSocketClient* client) {
+
+    for (uint8_t i = 0; i < MAX_WEB_CLIENTS; i++) {
+        if (_clients[i].client == client)
+            return &_clients[i];
+    }
+
+    return nullptr;
+}
+
+/*-----  RETURN THE USED CLIENT STRUCT TO ITS ORIGINAL EMPTY STATE  -----*/
+
+void Web::clearClient(WebClient* wc) {
+  if (wc == nullptr)
+    return;
+  wc->client        = nullptr;
+  wc->clientId      = 0;
+  wc->pgName        = "";
+  wc->ip            = IPAddress();
+  wc->connectedAt   = 0;
+  wc->lastActivity  = 0;
+}
+
+/*-----  PUT THE PAGE NAME INTO THE CLIENT RECORD  -----*/
+
+bool Web::setClientPage(AsyncWebSocketClient* client, const String& pgName) {
+    WebClient* wc = findClient(client);
+    if (wc == nullptr)
+        return false;
+    wc->pgName = pgName;
+    return true;
+}
+

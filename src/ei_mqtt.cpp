@@ -36,7 +36,7 @@ bool EiMqtt::evtLoop() {
 void EiMqtt::buildHeartbeatPayload() {
     JsonDocument doc;
 
-    doc["shortName"] = appIDs.shortName;
+    doc["sourceId"] = appIDs.sourceId;
     doc["messageType"] = "heartbeat";
     doc["protocolVersion"] = 1;
 
@@ -215,7 +215,7 @@ void EiMqtt::onMqttConnect(bool sessionPresent) {
   logging.setDestination(LogDestination::MqttServer);
   logInfo(LS, ET::MQTT, "Received MQTT connection notice. Session " +
           String(sessionPresent ? "is" : "is not") + " present.");
-  addSubscriptions();
+  subscribeToTopic();
 }
 
 /*---------------  ON MQTT DISCONNECT  ---------------*/
@@ -247,20 +247,12 @@ void EiMqtt::onMqttUnsubscribe(uint16_t packetId) {
   logInfo(LS, ET::MQTT, "Unsubscribe acknowledged.  packetId: " + String(packetId));
 }
 
-/*---------------  PROCESS THE NEWLY ARRIVES MQTT MSG  ---------------*/
+/*---------------  DELIVER AN INCOMING MQTT MESSAGE TO EI SYSTEM  ---------------*/
 
 void EiMqtt::processInboundMsg(const JsonDocument& doc) {
-  String owner = doc["owner"].as<String>();                     // Determine the owner of the message.
-  if (owner == "library") {                                     // Route library-owned messages.
-    eiSystem.handleMsg(doc);
-    return;
-  }
-  if (owner == "application") {                                 // Route application-owned messages.
-    appHandleMsg(doc);
-    return;
-  }
-  logError(LS, ET::MQTT, "Received MQTT message with unknown owner '" + owner + "'.");
+    eiSystem.processExternalMsg(doc, Source::NODE_RED);
 }
+
 /*---------------  HELPER TO LOG ERRORS ON M=MQTT MSG RECEIPT  ---------------*/
 
 void EiMqtt::missingField(const String& field, const String& json) {
@@ -392,7 +384,8 @@ bool EiMqtt::setMaxSubCnt(uint16_t maxCnt) {
 
 /*-----  ADD REQUESTED SUBSCRIPTIONS  -----*/
 
-bool EiMqtt::addAppMQTTSubscriptions(const String& name, const String& topic, uint8_t qos) {
+bool EiMqtt::addSubscription(const String& name, const String& topic, uint8_t qos) {
+  
   if (_subscriptions == nullptr) {
     logError(LS, ET::MQTT, "Call setMaxSubCnt() before addSubscription().");
     return false;
@@ -408,16 +401,15 @@ bool EiMqtt::addAppMQTTSubscriptions(const String& name, const String& topic, ui
   return true;
 }
 
-/*-----  ADD THE APP DESIRED SUBSCRIPTIONS  -----*/
+/*-----  SUCSCRIBE TO THE DESIRED SUBSCRIPTION  -----*/
 
-bool EiMqtt::addSubscriptions() {
+bool EiMqtt::subscribeToTopic() {
   if (!_state.operational)
     return false;
   if (!_state.connected)
     return false;
   for (uint16_t i = 0; i < _subCnt; i++) {
-    _client.subscribe(_subscriptions[i].topic.c_str(),
-                      _subscriptions[i].qos);
+    _client.subscribe(_subscriptions[i].topic.c_str(), _subscriptions[i].qos);
   }
   return true;
 }
@@ -484,3 +476,4 @@ const char* EiMqtt::ownerToString(Owner owner) {
 void EiMqtt::processMsg(const JsonDocument& doc) {
   
 }
+

@@ -19,12 +19,28 @@
 
 #include <ei_types.h>
 
-namespace Text {
-  void getAppInfo(JsonDocument& doc, const char* filePath, const char* compileDate);
-  String getFileName(const char* filePath);
+enum class Source {
+  NOT_YET_SET = -1,
+  WEB,
+  NODE_RED,
+  APP_STARTUP
+};
+
+namespace AppInfo {
   void GetAppName(JsonObject app, const String& fileName);
-  void getAppVersion(JsonObject app, const String& fileName);
+  void getAppInfo(JsonDocument& doc, const char* filePath, const char* compileDate);
   String formatAppInfo(const JsonDocument& doc);
+  void getAppVersion(JsonObject app, const String& fileName);
   String addRuntimeInfo(String banner);
+}
+
+namespace Json {
+  String jsonToString(const JsonDocument& doc);
+}
+
+namespace Text {
+  String stripPath(const char* filePath);
   String pad(const String& s, char padCh, int width);
+  String sourceToStr(Source source);
+
 }

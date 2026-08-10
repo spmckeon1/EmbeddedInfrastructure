@@ -10,12 +10,12 @@
  01-26-2015 - Changed readFile() to have a boolean parameter for logging file contents.
  
  */
-#if __has_include("myConfig.h")
- #include "myConfig.h"
+#if __has_include("config.h")
+ #include "config.h"
 #else
  // 🎯 CRITICAL DEFENSIVE SANITY TRAP
- // If the project folder is missing myConfig.h, stop compilation immediately and tell the user why!
- #error "CRITICAL CONFIG ERROR: 'myConfig.h' is missing from your project folder. Please copy a template copy into your local sketch directory."
+ // If the project folder is missing config.h, stop compilation immediately and tell the user why!
+ #error "CRITICAL CONFIG ERROR: 'config.h' is missing from your project folder. Please copy a template copy into your local sketch directory."
 #endif
 
 #include <Arduino.h>
@@ -48,7 +48,7 @@ bool Storage::startup()
 #elif defined(SYSTEM_USES_SD)
   bool ok = startSD(SD_CS_PIN);
 #else
-  #error "No storage medium selected in myConfig.h"
+  #error "No storage medium selected in config.h"
 #endif
   if (!ok) return false;
   if (_fs == nullptr) {

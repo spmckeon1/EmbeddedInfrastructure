@@ -91,7 +91,7 @@ bool EiSystem::startup() {
 
 /*-----  PROCESS AN INCOMING LIBRARY MSG  -----*/
 
-void EiSystem::handleMsg(const JsonDocument& doc) {
+void EiSystem::processLibraryMsg(const JsonDocument& doc) {
   String service = doc["service"].as<String>();                     // Determine the destination service.
   if (service == "network") {                                       // Route to the Network subsystem.
     network.processMsg(doc);
@@ -212,4 +212,32 @@ void EiSystem::enableHeapMonitor(bool enabled) {
 void EiSystem::setHeapMonitorInterval(uint16_t minutes)
 {
     _config.heapMonitorInterval = minutes;
+}
+
+/*-----  PUBLIC: SET HEAP MONITORING ENABLED   -----*/
+
+void EiSystem::processExternalMsg(const JsonDocument& doc, Source source) {
+  if (!doc["owner"].is<const char*>()) {                          // ----- Validate the EI message envelope -----
+    logError(LS, ET::MQTT, "Received message missing mandatory field 'owner'.");
+    return;
+  }
+  if (!doc["origin"].is<const char*>()) {
+    logError(LS, ET::MQTT, "Received message missing mandatory field 'origin'.");
+    return;
+  }
+  if (!doc["command"].is<const char*>()) {
+    logError(LS, ET::MQTT, "Received message missing mandatory field 'command'.");
+    return;
+  }
+  String owner = doc["owner"].as<String>();
+  if (owner == "library") {
+//    handleMsg(doc);
+    processLibraryMsg(doc);
+    return;
+  }
+  if (owner == "application") {
+    appHandleMsg(doc, source);
+    return;
+  }
+  logError(LS, ET::MQTT, "Received message with unknown owner '" + owner + "'.");
 }

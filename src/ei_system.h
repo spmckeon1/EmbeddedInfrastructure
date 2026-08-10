@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ei_types.h>
+#include <ei_utilities.h>
 
 struct SystemState {
   bool rebootPending = false;
@@ -21,11 +22,12 @@ public:
   bool bootStrap();
   bool setup();
   bool startup();
-  void handleMsg(const JsonDocument& doc);
+  void processLibraryMsg(const JsonDocument& doc);
   void requestReboot(const String& reason, bool immediate = false);
   void getFreeHeap();
   void enableHeapMonitor(bool enabled);
   void setHeapMonitorInterval(uint16_t minutes);
+  void processExternalMsg(const JsonDocument& doc, Source source);             // msgs comming in libraries that receive outside commuications
 
 private:
 private:
@@ -47,7 +49,9 @@ private:
   static const char* serviceToString(Service service);
   void checkHeap();
 
-  
 };
 
 extern EiSystem eiSystem;
+
+extern void appHandleMsg(const JsonDocument& doc, Source source);
+

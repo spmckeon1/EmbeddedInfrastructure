@@ -25,14 +25,15 @@ using DeviceId = uint16_t;
 //======================================================
 // Common Structures
 //======================================================
-
+/*
 struct AppConsts {
     String pgTitle;
     String accessPtName;
     String pageHeader;
     String uploadPg;
     String appName;
-    String appShortName;
+    String appSourceId;
 };
 
 extern AppConsts appConsts;
+*/

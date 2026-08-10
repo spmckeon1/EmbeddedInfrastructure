@@ -517,7 +517,6 @@ static const char PROGMEM webPgWiFiSetup[] = R"rawliteral(
         console.log("received webSocket event: " + s);
         if(s.indexOf('whoAreYou') != -1)  {                                     // if this is asking who you are
           sendText('iAmAWiFiSetUpPg:' + myUUID);                                // reply 'iAmAWiFiPage' and send the pages UUID
-//          getDirData('/dirLists/allDirs1Deep.txt')                              // request the servers directories data
           return;                                                               // just in case the string contains other match
         }
         if(s.indexOf('DownLoadLocRec:') != -1) {                                // if this is a download location receipt

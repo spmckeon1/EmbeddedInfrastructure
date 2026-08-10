@@ -18,7 +18,7 @@ struct AppFnamePolicy {
 
 struct AppIDs {
   const char* appName;
-  const char* shortName;
+  const char* sourceId;
   const char* accessPointName;
   const char* pageTitle;
   const char* pageHeader;

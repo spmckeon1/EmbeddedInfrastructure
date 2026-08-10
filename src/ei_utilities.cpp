@@ -1,3 +1,10 @@
+/*
+  myStuff libraries to EI libraries changes:
+    srcIdToNm() -> sourceToStr()
+ 
+ */
+
+
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
@@ -5,39 +12,23 @@
 #include <ei_network.h>
 #include <ei_utilities.h>
 
-namespace Text
-{
+/***************  NAMESPACE APPINFO  ****************/
 
 /*-----  ASSEMBLE THE DESIRED INFORMATION  -----*/
 
-  void getAppInfo(JsonDocument& doc, const char* filePath, const char* compileDate) {
-    JsonObject app = doc["application"].to<JsonObject>();
-    String fileName = getFileName(filePath);
-    GetAppName(app, fileName);
-    getAppVersion(app, fileName);
-    app["author"]   = "Stephen McKeon";
-    app["compiled"] = compileDate;
-    app["source"]   = filePath;
-  }
-
-/*-----  GET THE FILE NAME -----*/
-
-String getFileName(const char* filePath) {
-  String path(filePath);
-  int pos = path.lastIndexOf('/');
-#ifdef _WIN32
-  int pos2 = path.lastIndexOf('\\');
-  if (pos2 > pos)
-    pos = pos2;
-#endif
-  if (pos >= 0)
-    return path.substring(pos + 1);
-  return path;
+void AppInfo::getAppInfo(JsonDocument& doc, const char* filePath, const char* compileDate) {
+  JsonObject app = doc["application"].to<JsonObject>();
+  String fileName = Text::stripPath(filePath);
+  GetAppName(app, fileName);
+  getAppVersion(app, fileName);
+  app["author"]   = "Stephen McKeon";
+  app["compiled"] = compileDate;
+  app["source"]   = filePath;
 }
 
 /*-----  FILL IN THE APPLICATION NAE -----*/
 
-void GetAppName(JsonObject app, const String& fileName) {
+void AppInfo::GetAppName(JsonObject app, const String& fileName) {
   int pos = fileName.lastIndexOf("_v");
   
   if (pos >= 0)
@@ -48,7 +39,7 @@ void GetAppName(JsonObject app, const String& fileName) {
 
 /*-----  FILL IN THE APPLICATION VERSION -----*/
 
-void getAppVersion(JsonObject app, const String& fileName) {
+void AppInfo::getAppVersion(JsonObject app, const String& fileName) {
   int start = fileName.lastIndexOf("_v");
   
   if (start < 0)
@@ -64,9 +55,9 @@ void getAppVersion(JsonObject app, const String& fileName) {
   app["version"] = fileName.substring(start + 2, end);
 }
 
-  /*-----  PUT THE DOC DATA I TE STANDARD FORMAT AND RETURN THE DATA IN STRING -----*/
+  /*-----  PUT THE DOC DATA INTO THE STANDARD FORMAT AND RETURN THE DATA IN STRING -----*/
 
-String formatAppInfo(const JsonDocument& doc) {
+String AppInfo::formatAppInfo(const JsonDocument& doc) {
   JsonObjectConst app = doc["application"];
   String result;
   if (!app["name"].isNull() && !app["version"].isNull())
@@ -82,7 +73,7 @@ String formatAppInfo(const JsonDocument& doc) {
 
 /*-----  GET RUN TIME AND IP ADDRESS INFO -----*/
 
-String addRuntimeInfo(String banner) {
+String AppInfo::addRuntimeInfo(String banner) {
   time_t bootTime = eiTime.getBootTime();
   if (bootTime != 0) {
     unsigned long elapsedMs =
@@ -97,9 +88,21 @@ String addRuntimeInfo(String banner) {
   return banner;
 }
 
-  /*---------------  PAD A STRING---------------*/
+/***************  NAMESPACE JSON  ****************/
 
-String pad(const String& s, char padCh, int width) {
+/*-----  SERIALIZE A JSON OBJECT TO A STRING -----*/
+
+String Json::jsonToString(const JsonDocument& doc) {
+    String json;
+    serializeJson(doc, json);
+    return json;
+}
+
+/***************  NAMESPACE TEXT  ****************/
+
+/*---------------  PAD A STRING---------------*/
+
+String Text::pad(const String& s, char padCh, int width) {
   String result = s;
   int len = result.length();
   if (len < width) {
@@ -110,6 +113,32 @@ String pad(const String& s, char padCh, int width) {
   return result;
 }
 
+/*-----  GET THE FILE NAME -----*/
+
+String Text::stripPath(const char* filePath) {
+  String path(filePath);
+  int pos = path.lastIndexOf('/');
+#ifdef _WIN32
+  int pos2 = path.lastIndexOf('\\');
+  if (pos2 > pos)
+    pos = pos2;
+#endif
+  if (pos >= 0)
+    return path.substring(pos + 1);
+  return path;
 }
 
+/*---------------  CONVERT SOURCE ID TO NAME  ---------------*/
+
+//String sourceIdtoName(Source source) {
+String Text::sourceToStr(Source source) {
+  switch (source) {
+    case Source::NOT_YET_SET: return "Not yet set";
+    case Source::WEB:         return "Web";
+    case Source::NODE_RED:    return "Node-RED";
+    case Source::APP_STARTUP: return "Application startup";
+    default: return "ERROR: Unknown source: " + String(static_cast<int>(source));
+  }
+//  return"ERROR: Unknown source: " + String(source);
+}
 

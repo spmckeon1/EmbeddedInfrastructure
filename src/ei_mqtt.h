@@ -89,7 +89,6 @@ public:
   bool configureFromJson(const JsonDocument& doc);
   const MqttConfig& config() const;
   void processMsg(const JsonDocument& doc);
-  bool addAppMQTTSubscriptions(const String& name, const String& topic, uint8_t qos);
 
 private:
   enum class Owner {
@@ -133,7 +132,7 @@ private:
                      size_t total);
   void onMqttPublish(uint16_t packetId);
   String disconnectReasonToString(AsyncMqttClientDisconnectReason reason) const;
-  bool addSubscriptions();
+  bool subscribeToTopic();
   void dumpConfig() const;
   Owner ownerFromString(const char* s);
   const char* ownerToString(Owner owner);
@@ -141,5 +140,3 @@ private:
 };
 
 extern EiMqtt mqtt;
-
-extern void appHandleMsg(const JsonDocument& doc);
