@@ -15,6 +15,8 @@
 
 EiMqtt mqtt;
 
+const Topic EiMqtt::HEARTBEAT_TOPIC{"ei/to/nr/hb"};
+
 /*-----  MQTT EVENT LOOP  -----*/
 
 bool EiMqtt::evtLoop() {
@@ -25,9 +27,20 @@ bool EiMqtt::evtLoop() {
   if(!_state.connected && scheduler.isTimeToRun(loopTimer)) {
     connect();
   }
-  sendHeartbeat();
+  if (_state.connected) sendHeartbeat();
+  
   // add event capture here
   return false;
+}
+
+void EiMqtt::buildHeartbeatPayload() {
+    JsonDocument doc;
+
+    doc["shortName"] = appIDs.shortName;
+    doc["messageType"] = "heartbeat";
+    doc["protocolVersion"] = 1;
+
+    serializeJson(doc, _heartbeatPayload);
 }
 
 /*-----  START THE MQTT SYSTEM  -----*/
@@ -36,6 +49,7 @@ bool EiMqtt::startup() {
   if(network.isConnected() && !_state.connected) {
     connect();
   }
+  buildHeartbeatPayload();
   return true;
 }
 
@@ -115,18 +129,18 @@ void EiMqtt::configureLastWill() {
                   appMqttLwtPolicy.retain,
                   appMqttLwtPolicy.offlineMsg.c_str()
   );
-  logInfo(LS, ET::MQTT, "Registered Last Will & Testament protect lane on topic: " + appMqttLwtPolicy.topic);
+  logInfo(LS, ET::MQTT, "Registered Last Will & Testament protect lane on topic: " + String(appMqttLwtPolicy.topic.c_str()));
 }
 
 /*-----  CONFIGURE THE HEARTBEAT  -----*/
 
 void EiMqtt::sendHeartbeat() {
   static RunTime hbTimer = {IntervalType::IT_MINUTE, 1, -1};
-  if (!mqttHbPolicy.enabled)                                  // if heartbeats are not desired
-    return;                                                   // just return
+  if (!mqttHbPolicy.enabled)                                        // if heartbeats are not desired
+    return;                                                         // just return
   static uint32_t lastHeartbeat = 0;
-  if(!scheduler.isTimeToRun(hbTimer)) return;                 // if it is not time to send a heartbeat then just return
-  mqttPubMsg(mqttHbPolicy.topic, 0, false, "ping", LN);       // send a heartbeat to node red
+  if(!scheduler.isTimeToRun(hbTimer)) return;                       // if it is not time to send a heartbeat then just return
+  mqttPubMsg(HEARTBEAT_TOPIC, QOS0, FORGET, _heartbeatPayload, LN); // send a heartbeat to node red
 }
 
 /*-----  _config DATA TO A JSON DOC  -----*/
@@ -183,13 +197,13 @@ bool EiMqtt::writeCfgToDisk() {
 
 /*-----  PUBLISH A MQTT MSG TO NODE RED  -----*/
 
-bool EiMqtt::mqttPubMsg(const String& topic, uint8_t qos, boolean retain, const char* message, int from) {
+bool EiMqtt::mqttPubMsg(const Topic& topic, QoS qos, Retain retain, const char* message, int from) {
   if(topic.isEmpty()) return false;
   return _client.publish(topic.c_str(), qos, retain, message);
 }
 
 // The helper function that catches standard Arduino Strings and handles them safely
-bool EiMqtt::mqttPubMsg(const String& topic, uint8_t qos, boolean retain, const String& message, int from) {
+bool EiMqtt::mqttPubMsg(const Topic& topic, QoS qos, Retain retain, const String& message, int from) {
   return mqttPubMsg(topic, qos, retain, message.c_str(), from);
 }
 

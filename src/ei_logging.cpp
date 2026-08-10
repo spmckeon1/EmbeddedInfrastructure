@@ -3,7 +3,6 @@
 #include <ei_types.h>
 #include <ei_appPolicy.h>
 #include <ei_logging.h>
-#include <ei_mqtt.h>
 #include <ei_storage.h>
 #include <ei_time.h>
 #include <ei_conversion.h>
@@ -227,7 +226,7 @@ bool Logging::enqueuePendingLog(const String& jsonLog) {
 /*-----  REMOVE LOGS FROM THE HEAD TO THE TAIL  -----*/
 
 bool Logging::dequeuePendingLog(String& jsonLog) {
-  TRACE();
+//  TRACE();
   if (pendingLogsEmpty())
     return false;
   jsonLog = _pendingLogQueue[_queueHead];             // Transfer ownership of the oldest pending log
@@ -246,7 +245,7 @@ bool Logging::dequeuePendingLog(String& jsonLog) {
    if (!mqtt.connected()) {
      return false;
    }
-   TRACE();
+//   TRACE();
   String jsonLog;
   if (!dequeuePendingLog(jsonLog))
     return false;

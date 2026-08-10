@@ -22,6 +22,7 @@
 
 #include <Arduino.h>
 #include <ei_types.h>
+#include <ei_mqtt.h>
 
 #define FI __FILE__           // compiler get file name
 #define FN __func__           // compiler get function name
@@ -123,9 +124,9 @@ namespace ET
 }
 
 struct LoggingConfig {
-  String topic = "/ei/to/nr/logs";
-  uint8_t qos = 0;
-  bool retain = false;
+  Topic topic{"/ei/to/nr/logs"};
+  QoS qos = QOS0;
+  Retain retain = FORGET;
 };
 
 enum class LogDestination {

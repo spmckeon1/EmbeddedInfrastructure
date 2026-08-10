@@ -25,6 +25,17 @@
 #include <AsyncMqttClient.h>
 #include "ei_events.h"
 
+enum QoS {
+    QOS0 = 0,
+    QOS1 = 1,
+    QOS2 = 2
+};
+
+enum Retain {
+    FORGET = 0,
+    RETAIN = 1
+};
+
 struct MqttConfig {
   String host;
   uint16_t port = 1883;
@@ -32,6 +43,7 @@ struct MqttConfig {
   String brokerPwd;
   bool dirty = false;
 };
+
 struct MqttState {
   bool operational = true;
   bool connected = false;
@@ -48,13 +60,28 @@ struct MqttSubscription {
     uint8_t qos = 0;
 };
 
+class Topic {
+public:
+  constexpr explicit Topic(const char* value)
+      : _value(value) {}
+  constexpr const char* c_str() const {
+    return _value;
+  }
+  constexpr bool isEmpty() const {
+    return (_value == nullptr) || (_value[0] == '\0');
+  }
+private:
+  const char* _value;
+};
+
 class EiMqtt {
 public:
+
   bool evtLoop();
   bool startup();
   bool setup();
-  bool mqttPubMsg(const String& topic, uint8_t qos, boolean retain, const char* message, int from);
-  bool mqttPubMsg(const String& topic, uint8_t qos, boolean retain, const String& message, int from);
+  bool mqttPubMsg(const Topic& topic, QoS qos, Retain retain, const char* message, int from);
+  bool mqttPubMsg(const Topic& topic, QoS qos, Retain retain, const String& message, int from);
   bool setMaxSubCnt(uint16_t maxCnt);
   bool addSubscription(const String& name, const String& topic, uint8_t qos);
   bool connected() const;
@@ -74,12 +101,15 @@ private:
   MqttConfig _config;
   MqttState  _state;
   MqttStats  _stats;
+  String _heartbeatPayload;
+  static const Topic HEARTBEAT_TOPIC;
   AsyncMqttClient _client;
   String _configFileName = "";
   MqttSubscription* _subscriptions = nullptr;
   uint16_t _maxSubCnt = 0;
   uint16_t _subCnt    = 0;
 
+  void buildHeartbeatPayload();
   void applyConfiguration();
   void connect();
   void configureLastWill();
