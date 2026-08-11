@@ -59,7 +59,7 @@ struct MqttSubscription {
     String  topic;
     uint8_t qos = 0;
 };
-
+/*
 class Topic {
 public:
   constexpr explicit Topic(const char* value)
@@ -73,6 +73,7 @@ public:
 private:
   const char* _value;
 };
+*/
 
 class EiMqtt {
 public:
@@ -80,8 +81,8 @@ public:
   bool evtLoop();
   bool startup();
   bool setup();
-  bool mqttPubMsg(const Topic& topic, QoS qos, Retain retain, const char* message, int from);
-  bool mqttPubMsg(const Topic& topic, QoS qos, Retain retain, const String& message, int from);
+  bool mqttPubMsg(const String& topic, QoS qos, Retain retain, const char* message, int from);
+  bool mqttPubMsg(const String& topic, QoS qos, Retain retain, const String& message, int from);
   bool setMaxSubCnt(uint16_t maxCnt);
   bool addSubscription(const String& name, const String& topic, uint8_t qos);
   bool connected() const;
@@ -101,7 +102,7 @@ private:
   MqttState  _state;
   MqttStats  _stats;
   String _heartbeatPayload;
-  static const Topic HEARTBEAT_TOPIC;
+  static const String HEARTBEAT_TOPIC;
   AsyncMqttClient _client;
   String _configFileName = "";
   MqttSubscription* _subscriptions = nullptr;
@@ -113,6 +114,7 @@ private:
   void connect();
   void configureLastWill();
   void sendHeartbeat();
+  void registerWithNodeRed();
   void configToJson(JsonDocument& doc) const;
   bool jsonToConfig(const JsonDocument& doc);
   bool readCfgFromDisk();

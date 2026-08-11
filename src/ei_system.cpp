@@ -93,23 +93,29 @@ bool EiSystem::startup() {
 
 void EiSystem::processLibraryMsg(const JsonDocument& doc) {
   String service = doc["service"].as<String>();                     // Determine the destination service.
+//  DUMP(service);
   if (service == "network") {                                       // Route to the Network subsystem.
+//    DUMP("network");
     network.processMsg(doc);
     return;
   }
   if (service == "mqtt") {                                          // Route to the MQTT subsystem.
+//    DUMP(" mqtt");
     mqtt.processMsg(doc);
     return;
   }
   if (service == "time") {                                          // Route to the Time subsystem.
+//    DUMP("time");
     eiTime.processMsg(doc);
     return;
   }
   if (service == "storage") {                                       // Route to the Storage subsystem.
+//    DUMP("storage");
     storage.processMsg(doc);
     return;
   }
   if (service == "web") {                                           // Route to the Web subsystem.
+//    DUMP("web");
     web.processMsg(doc);
     return;
   }

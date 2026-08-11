@@ -27,7 +27,7 @@ struct AppIDs {
 
 struct MqttLwtPolicy {
   bool enabled = false;
-  Topic topic{"default/lwt/topic"};
+  String topic = "default/lwt/topic";
   String onlineMsg = "Online";
   String offlineMsg = "Offline";
   uint8_t qos = 1;

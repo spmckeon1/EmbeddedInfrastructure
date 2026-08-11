@@ -124,7 +124,7 @@ namespace ET
 }
 
 struct LoggingConfig {
-  Topic topic{"/ei/to/nr/logs"};
+  String topic = "/ei/to/nr/logs";
   QoS qos = QOS0;
   Retain retain = FORGET;
 };

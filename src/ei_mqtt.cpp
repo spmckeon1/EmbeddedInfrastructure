@@ -15,7 +15,7 @@
 
 EiMqtt mqtt;
 
-const Topic EiMqtt::HEARTBEAT_TOPIC{"ei/to/nr/hb"};
+const String EiMqtt::HEARTBEAT_TOPIC{"ei/to/nr/hb"};
 
 /*-----  MQTT EVENT LOOP  -----*/
 
@@ -143,6 +143,27 @@ void EiMqtt::sendHeartbeat() {
   mqttPubMsg(HEARTBEAT_TOPIC, QOS0, FORGET, _heartbeatPayload, LN); // send a heartbeat to node red
 }
 
+/*-----  REGISTER APPLICATION WITH NODE-RED  -----*/
+
+void EiMqtt::registerWithNodeRed() {
+  const String topic = String("register/to/nr/") + appIDs.sourceId;
+  JsonDocument doc;
+  doc["appName"]           = appIDs.appName;
+  doc["sourceId"]          = appIDs.sourceId;
+  doc["heartbeatInterval"] = mqttHbPolicy.interval;
+  doc["timeout"]            = mqttHbPolicy.timeout;
+  String json;
+  serializeJson(doc, json);
+  mqttPubMsg(
+             topic,
+             QOS2,
+             FORGET,
+             json,
+             LN
+  );
+  logInfo(LS, ET::MQTT, "Registered application with Node-RED.");
+}
+
 /*-----  _config DATA TO A JSON DOC  -----*/
 
 void EiMqtt::configToJson(JsonDocument& doc) const
@@ -197,13 +218,13 @@ bool EiMqtt::writeCfgToDisk() {
 
 /*-----  PUBLISH A MQTT MSG TO NODE RED  -----*/
 
-bool EiMqtt::mqttPubMsg(const Topic& topic, QoS qos, Retain retain, const char* message, int from) {
+bool EiMqtt::mqttPubMsg(const String& topic, QoS qos, Retain retain, const char* message, int from) {
   if(topic.isEmpty()) return false;
   return _client.publish(topic.c_str(), qos, retain, message);
 }
 
 // The helper function that catches standard Arduino Strings and handles them safely
-bool EiMqtt::mqttPubMsg(const Topic& topic, QoS qos, Retain retain, const String& message, int from) {
+bool EiMqtt::mqttPubMsg(const String& topic, QoS qos, Retain retain, const String& message, int from) {
   return mqttPubMsg(topic, qos, retain, message.c_str(), from);
 }
 
@@ -213,9 +234,10 @@ void EiMqtt::onMqttConnect(bool sessionPresent) {
   _state.connected = true;
   eiEvents.notify(EiEvent::MqttConnected);
   logging.setDestination(LogDestination::MqttServer);
-  logInfo(LS, ET::MQTT, "Received MQTT connection notice. Session " +
-          String(sessionPresent ? "is" : "is not") + " present.");
+  logInfo(LS, ET::MQTT, "Received MQTT connection notice. Session " + String(sessionPresent ? "is" : "is not") + " present.");
   subscribeToTopic();
+  registerWithNodeRed();
+  mqttPubMsg(appMqttLwtPolicy.topic, QOS1, FORGET, appMqttLwtPolicy.onlineMsg, LN);
 }
 
 /*---------------  ON MQTT DISCONNECT  ---------------*/
