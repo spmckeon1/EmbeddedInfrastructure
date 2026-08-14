@@ -117,7 +117,7 @@ Ther EI libraries provide visibility to the follow startup routimes
 - WifiConnected: the wif systej has successfully connected
 - WifiDisconnected: The wifi ystem has become disconnected
 - MqttConnected: The MQTT serer has been succesfully conneted to
--  MqttDisconnected: The MQTT server has been dosconnect
+- MqttDisconnected: The MQTT server has been dosconnect
 
 Your function can do take any actims yo desire but understand there will be no incoming parameters
 
@@ -147,7 +147,13 @@ eiEvents.on(EiEvent::(eventName, AppProcessToCall);
 ...
 
 ## Required Startup Sequence
+```c++
+ - fillAppIDs();
+ - setupHeartBeat();
+ - ds18b20.sendStartupData(uint8_t oneWirePin, uint8_t expectedSensorCount);
+```
 
+### 
 ...
 
 ## Optional Features

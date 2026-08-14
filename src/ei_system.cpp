@@ -1,6 +1,7 @@
 
 #include <Arduino.h>
 #include <ei_appPolicy.h>
+#include <ei_ds18b20.h>
 #include <ei_storage.h>
 #include <ei_mqtt.h>
 #include <ei_network.h>
@@ -51,6 +52,10 @@ void EiSystem::evtLoop() {
       eiTime.evtLoop();
       break;
     case 4:
+      nextSubsystem = 5;
+      ds18b20.evtLoop();
+      break;
+    case 5:
     default:
       nextSubsystem = 0;
       mqtt.evtLoop();
@@ -75,6 +80,7 @@ bool EiSystem::setup() {
   if(!eiTime.setup()) return false;
   if(!mqtt.setup()) return false;
   if(!ota.setup()) return false;
+  if(!ds18b20.setup()) return false;
 
   return true;
 }
@@ -84,6 +90,7 @@ bool EiSystem::startup() {
   if(!mqtt.startup()) return false;
   if(!web.startup()) return false;
   if(!ota.startup()) return true;
+  if(!ds18b20.startup()) return false;
   return true;
 }
 

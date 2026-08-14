@@ -62,7 +62,7 @@ String Logging::formatJsonStrLogEntry(const char* file,
 
   doc["deviceSequence"] = devSeq++;
   doc["eventTime"]      = eiTime.getLogTimeStamp();
-  doc["component"]      = appIDs.sourceId;
+  doc["sourceId"]      = appIDs.sourceId;
   doc["file"]           = file;
   doc["function"]       = function;
   doc["line"]           = lineNum;
