@@ -18,11 +18,14 @@
  #error "CRITICAL CONFIG ERROR: 'config.h' is missing from your project folder. Please copy a template copy into your local sketch directory."
 #endif
 
+#include <ei_storage.h>
+
 #include <Arduino.h>
 #include <ArduinoTrace.h>
+
 #include <ei_conversion.h>
+#include <ei_system.h>
 #include <ei_web.h>
-#include <ei_storage.h>
 
 Storage storage;        // This brings the object to life in memory!
 
@@ -182,6 +185,30 @@ void Storage::buildDirReport(String &report, const char *dirname, uint8_t levels
     file = root.openNextFile();
   }
   root.close();
+}
+
+/*---------------  GET A JsonArray OF THE DISK DIRECTORIES  ---------------*/
+
+void Storage::buildDirectoryList(JsonArray directories, const char* dirname)
+{
+    File root = _fs->open(dirname);
+
+    if (!root || !root.isDirectory()) {
+        return;
+    }
+
+    File file = root.openNextFile();
+
+    while (file) {
+
+        if (file.isDirectory()) {
+            directories.add(file.name());
+        }
+
+        file = root.openNextFile();
+    }
+
+    root.close();
 }
 
 /*---------------  LIST DIRECTORY  ---------------*/
@@ -474,6 +501,20 @@ Storage::EnsureFileResult Storage::ensureFileExists(const String& fileName, cons
   return EnsureFileResult::Created;
 }
 
+/*---------------  PUBLIC - IS THIS FILE OM THE DISK  ---------------*/
+
+bool Storage::fileExists(const String& fileName) const {
+
+    if (_fs->exists(fileName)) {
+        return true;
+    }
+
+    logError(LS, ET::STORAGE, "The file '" + fileName + "' does not exist. Please add this file to the disk."
+    );
+
+    return false;
+}
+
 /*---------------  PUBLIC - DOES THIS FILE EXIST IN THE FILE SYSTEM (String)  ---------------*/
 
 bool Storage::exists(const String& path) const {
@@ -566,5 +607,146 @@ bool Storage::readJsonFile(const char* path, JsonDocument& doc, int from) {
 /*-----  PROCESS AN INCOMING MSG  -----*/
 
 void Storage::processMsg(const JsonDocument& doc) {
-  
+  String route = doc["route"] | "";
+  String command = doc["command"] | "";
+  if (route == "storage/file") {
+    if (command == "SET") {
+      String path = doc["data"]["path"] | "";
+      if (path.isEmpty()) {
+        logError(LS, ET::STORAGE, "File upload SET received without a path.");
+        return;
+      }
+      if (!beginUpload(path.c_str())) {
+        logError(LS, ET::STORAGE, "Unable to begin file upload.");
+        return;
+      }
+      logInfo(LS, ET::STORAGE, "File upload ready for '" + path + "'.");
+      JsonDocument response;
+      response["owner"] = "library";
+      response["receiver"] = "web";
+      response["route"] = "storage/file";
+      response["command"] = "RESULT";
+      JsonObject data = response["data"].to<JsonObject>();
+      data["success"] = true;
+      data["message"] = "Upload ready.";
+      data["path"] = path;
+      eiSystem.routeOutboundMsg(response);
+      return;
+    }
+    if (command == "COMPLETE") {
+      if (!endUpload()) {
+        logError(LS, ET::STORAGE, "File upload failed while finalizing.");
+        return;
+      }
+      logInfo(LS, ET::STORAGE, "File upload completed successfully.");
+      return;
+    }
+  }
+}
+
+/*-----  PROCESS INCOMING BINARY FILE MSGA  -----*/
+
+void Storage::processBinary(const uint8_t* data, size_t len) {
+
+  if (!writeUploadChunk(data, len)) {
+    abortUpload();
+    logError(LS, ET::STORAGE, "File upload aborted because a chunk could not be written.");
+    return;
+  }
+}
+
+/*-----  BEGIN THE FILE UPLOAD PROCESS  -----*/
+
+bool Storage::beginUpload(const char* path) {
+
+    if (_uploadFile) {
+        _uploadFile.close();
+    }
+
+    _uploadBytes = 0;
+
+    _uploadFile = _fs->open(path, FILE_WRITE);
+
+    if (!_uploadFile) {
+        logError(
+            LS,
+            ET::STORAGE,
+            "Unable to open upload file '" + String(path) + "' for writing."
+        );
+
+        return false;
+    }
+
+    logInfo(
+        LS,
+        ET::STORAGE,
+        "Upload started for file '" + String(path) + "'."
+    );
+
+    return true;
+}
+
+
+/*-----  WRITE A NEWLY RECEIVED DATA CHUNK TO THE FILE  -----*/
+
+bool Storage::writeUploadChunk(const uint8_t* data, size_t len) {
+
+    if (!_uploadFile) {
+        logError(LS, ET::STORAGE, "Upload chunk received without an open upload file.");
+        return false;
+    }
+
+    size_t written = _uploadFile.write(data, len);
+
+    if (written != len) {
+        logError(
+            LS,
+            ET::STORAGE,
+            "Upload write failed. Wrote " +
+            String(written) + " of " +
+            String(len) + " bytes."
+        );
+        return false;
+    }
+
+    _uploadBytes += written;
+
+    return true;
+}
+
+/*-----  END THE CHINLED FILE UPLOAD  -----*/
+
+bool Storage::endUpload() {
+
+    if (!_uploadFile) {
+        logError(LS, ET::STORAGE, "Upload completion requested without an open upload file."
+        );
+        return false;
+    }
+
+    _uploadFile.close();
+
+    logInfo(
+        LS,
+        ET::STORAGE,
+        "File '" + String(_uploadFile.name()) +
+        "' successfully uploaded, " +
+        String(_uploadBytes) +
+        " bytes transferred."
+    );
+
+    refreshStats();
+
+    return true;
+}
+
+/*-----  CHUNK FILE UPLOAD FAILURE CLEANUP  -----*/
+
+void Storage::abortUpload() {
+
+    if (_uploadFile) {
+        _uploadFile.close();
+    }
+
+    _uploadBytes = 0;
 }

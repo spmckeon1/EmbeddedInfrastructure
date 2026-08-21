@@ -11,6 +11,7 @@
 #include <ei_types.h>
 #include <ei_system.h>
 #include <ei_time.h>
+#include <ei_webProvisioning.h>
 
 struct WebClient {
   AsyncWebSocketClient* client;   // Connection identity
@@ -29,16 +30,25 @@ class AsyncWebSocketClient;
 class Web
 {
 public:
-  void start();
+  bool setup();
   bool startup();
   void evtLoop();
   void setDownloadingFile(bool downloading) { _downloadingFile = downloading; }
   void sendWS_msg(const String& message, AsyncWebSocketClient* client);
-  void hdlWiFiSetupEvent(String s,AsyncWebSocketClient* client);
+  void webPubMsg(const JsonDocument& doc);
+  bool hdlWiFiSetupEvent(String s,AsyncWebSocketClient* client);
   void initNewWiFiPg(String s, AsyncWebSocketClient *client);
   bool downloadingFile() const;
   const char *getContentType(const String &path) const;
   void processMsg(const JsonDocument& doc);
+  void onWsEvent(AsyncWebSocket* server,
+                        AsyncWebSocketClient* client,
+                        AwsEventType type,
+                        void* arg,
+                        uint8_t* data,
+                        size_t len);bool handleConfigurationUpdate(String s);
+
+
 
 private:
   AsyncWebServer _server{80};
@@ -50,8 +60,8 @@ private:
   static constexpr uint8_t MAX_WEB_CLIENTS = 10;
   WebClient _clients[MAX_WEB_CLIENTS];
 
-
-  bool handleConfigurationUpdate(String s);
+  void processWsMessage(uint8_t* data, size_t len);
+  void processWsBinary(uint8_t* data, size_t len);
   bool handleIncomingFile(String s);
   void gatherWiFiSetupData(String &jsonOutput);
   bool handleDownloadLocation(String s, AsyncWebSocketClient* client);
@@ -71,6 +81,7 @@ private:
   void clearClient(WebClient* client);
   WebClient* addClient(AsyncWebSocketClient* client);
   bool setClientPage(AsyncWebSocketClient* client, const String& pgName);
+  void processSetupMsg(const JsonDocument& doc);
 
 };
 

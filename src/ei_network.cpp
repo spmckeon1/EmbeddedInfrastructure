@@ -13,6 +13,7 @@
 #include <ei_conversion.h>
 #include <ei_storage.h>
 #include <ei_network.h>
+#include <ei_web.h>
 
 /*-----  CLASS CONSTRUCTOR  -----*/
 // This wires your custom log bridge directly into WiFiManager before boot
@@ -362,6 +363,7 @@ bool EiNetwork::configure(const NetworkConfig& cfg) {
     logError(LS, ET::NETWORK, "Unable to save network configuration.");
     return false;
   }
+  logInfo(LS, ET::NETWORK, "WiFi configuration updated.");
   return true;
 }
 
@@ -369,10 +371,10 @@ bool EiNetwork::configure(const NetworkConfig& cfg) {
 
 bool EiNetwork::configureFromJson(const JsonDocument& doc) {
   NetworkConfig cfg = _config;
-  if (doc["networkSsid"].is<String>())
-    cfg.ssid = doc["networkSsid"].as<String>();
-  if (doc["networkPass"].is<String>())
-    cfg.password = doc["networkPass"].as<String>();
+  if (doc["data"]["ssid"].is<String>())
+    cfg.ssid = doc["data"]["ssid"].as<String>();
+  if (doc["data"]["password"].is<String>())
+    cfg.password = doc["data"]["password"].as<String>();
   return configure(cfg);
 }
 
@@ -401,6 +403,8 @@ void EiNetwork::saveConfigCallback()
     }
 }
 
+/*-----  ***  -----*/
+
 void EiNetwork::updateConfigFromWiFiManager(NetworkConfig& cfg)
 {
     cfg.ssid     = wm.getWiFiSSID();
@@ -411,5 +415,54 @@ void EiNetwork::updateConfigFromWiFiManager(NetworkConfig& cfg)
 /*-----  PROCESS AN INCOMING MSG  -----*/
 
 void EiNetwork::processMsg(const JsonDocument& doc) {
-  
+  String route = doc["route"].as<String>();
+  String command = doc["command"].as<String>();
+
+  if (route == "network/wifi/cfg") {
+
+    if (command == "SET") {
+      JsonDocument response;
+      response["owner"] = "library";
+      response["route"] = "network/wifi/cfg";
+      response["command"] = "RESULT";
+      JsonObject data = response["data"].to<JsonObject>();
+      if (configureFromJson(doc)) {
+        data["success"] = true;
+        data["message"] = "WiFi configuration saved.";
+      } else {
+        data["success"] = false;
+        data["message"] = "WiFi configuration was not saved.";
+      }
+      web.webPubMsg(response);
+      return;
+    }
+    if (command == "GET") {
+      JsonDocument response = getWifiConfigMsg();
+      web.webPubMsg(response);
+      return;
+    }
+
+    logError(LS, ET::NETWORK, "Unknown command '" + command + "' for route '" + route + "'.");
+    return;
+  }
+
+  logError(LS, ET::NETWORK, "Unknown Network route '" + route + "'.");
 }
+
+/*-----  PROCESS AN INCOMING MSG  -----*/
+
+JsonDocument EiNetwork::getWifiConfigMsg() {
+    JsonDocument response;
+
+    response["owner"] = "library";
+    response["route"] = "network/wifi/cfg";
+    response["command"] = "GET";
+
+    JsonObject data = response["data"].to<JsonObject>();
+
+    data["ssid"] = _config.ssid;
+    data["password"] = _config.password;
+
+    return response;
+}
+

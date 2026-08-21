@@ -23,11 +23,13 @@ public:
   bool setup();
   bool startup();
   void processLibraryMsg(const JsonDocument& doc);
+  void routeOutboundMsg(const JsonDocument& doc);
   void requestReboot(const String& reason, bool immediate = false);
   void getFreeHeap();
   void enableHeapMonitor(bool enabled);
   void setHeapMonitorInterval(uint16_t minutes);
   void processExternalMsg(const JsonDocument& doc, Source source);             // msgs comming in libraries that receive outside commuications
+  void processMsg(const JsonDocument& doc);
 
 private:
 private:
@@ -53,5 +55,5 @@ private:
 
 extern EiSystem eiSystem;
 
-extern void appHandleMsg(const JsonDocument& doc, Source source);
+extern bool appHandleMsg(const JsonDocument& doc, Source source);
 

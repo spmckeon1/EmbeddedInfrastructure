@@ -76,6 +76,7 @@ public:
   bool evtLoop();
   bool startup();
   void dirReport(const char *dirname, uint8_t levels);
+  void buildDirectoryList(JsonArray directories, const char* dirname);
   String listDir(const char * dirname, uint8_t levels, char separator);
   bool createDir(const char * path);
   void removeDir(const char * path);
@@ -90,6 +91,7 @@ public:
   int getFileSize(const char * path);
   bool createDirIfNotExist(String dirName);
   EnsureFileResult ensureFileExists(const String& fileName, const JsonDocument& doc, int from);
+  bool fileExists(const String& fileName) const;
   bool exists(const char* path) const;
   bool exists(const String& path) const;
   const char* fileSystemName() const;
@@ -98,6 +100,11 @@ public:
   WriteResult writeJsonFile(const char* path, const JsonDocument& doc, int from);
   bool readJsonFile(const char* path, JsonDocument& doc, int from);
   void processMsg(const JsonDocument& doc);
+  void processBinary(const uint8_t* data, size_t len);
+  bool beginUpload(const char* path);
+  bool writeUploadChunk(const uint8_t* data, size_t len);
+  bool endUpload();
+  void abortUpload();
 
 private:
   StorageConfig _config;
@@ -105,6 +112,9 @@ private:
   StorageStats  _stats;
   int  _writeIndex = 0;
   bool _wrapped    = false;
+  File _uploadFile;
+  size_t _uploadBytes = 0;
+  size_t _receivedBytes = 0;
 
   fs::FS* _fs;                                      // File system
   #ifdef SYSTEM_USES_LITTLEFS

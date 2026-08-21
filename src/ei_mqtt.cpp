@@ -269,9 +269,10 @@ void EiMqtt::onMqttUnsubscribe(uint16_t packetId) {
   logInfo(LS, ET::MQTT, "Unsubscribe acknowledged.  packetId: " + String(packetId));
 }
 
-/*---------------  DELIVER AN INCOMING MQTT MESSAGE TO EI SYSTEM  ---------------*/
+/*---------------  DELIVER AN INCOMING MQTT MESSAGE TO EI SYSTEM  ---------------*
 
-void EiMqtt::processInboundMsg(const JsonDocument& doc) {
+//void EiMqtt::processInboundMsg(const JsonDocument& doc) {
+void EiMqtt::processInboundMsg(char* topic, const JsonDocument& doc) {
     eiSystem.processExternalMsg(doc, Source::NODE_RED);
 }
 
@@ -292,23 +293,19 @@ void EiMqtt::onMqttMessage(char* topic,
                            size_t index,
                            size_t total)
 {
-  String json(payload, len);                                          // Build the incoming JSON string.
-  JsonDocument doc;                                                   // Parse the JSON.
+  String json(payload, len);
+  JsonDocument doc;
   DeserializationError err = deserializeJson(doc, json);
   if (err) {
-      logError(LS, ET::MQTT, "Received invalid JSON. Error: " + String(err.c_str()) + ". Message: " + json);
-      return;
-  }
-  if (!doc["source"].is<const char*>()) {                               // Validate the required message fields.
-    missingField("source", json);
+    logError(LS, ET::MQTT, "Received invalid JSON. Error: " + String(err.c_str()) + ". Message: " + json);
     return;
   }
-  if (!doc["scope"].is<const char*>()) {
-    missingField("scope", json);
+  if (!doc["owner"].is<const char*>()) {
+    missingField("owner", json);
     return;
   }
-  if (!doc["service"].is<const char*>()) {
-    missingField("service", json);
+  if (!doc["route"].is<const char*>()) {
+    missingField("route", json);
     return;
   }
   if (!doc["command"].is<const char*>()) {
@@ -319,9 +316,8 @@ void EiMqtt::onMqttMessage(char* topic,
     missingField("data", json);
     return;
   }
-  processInboundMsg(doc);
+  eiSystem.processExternalMsg(doc, Source::NODE_RED);
 }
-
 
 /*---------------  ON MQTT PUBLISH  ---------------*/
 
@@ -350,6 +346,7 @@ bool EiMqtt::configure(const MqttConfig& cfg) {
   }
   return true;
 }
+
 /*-----  ALLOW THE EXTERNAL AGENT TO SEE THE CONFIGURATION OF THE MqttConfig STRUCT DATA  -----*/
 
 const MqttConfig& EiMqtt::config() const {

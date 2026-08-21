@@ -58,6 +58,25 @@ Examples:
 
 A component requiring one of these capabilities should request the service from its owner rather than implementing its own version.
 
+#### Web Message Envelope
+
+Web messages entering the system shall use a common JSON message
+envelope.
+
+The envelope provides the information required to identify the
+message owner, route the message within that owner, identify the
+requested operation, and provide command-specific data.
+
+```json
+{
+  "owner": "mqtt",
+  "route": "server/cfg",
+  "command": "SET",
+  "data": {
+    "address": "192.168.1.22"
+  }
+}
+
 ---
 
 ### Mechanism vs. Policy

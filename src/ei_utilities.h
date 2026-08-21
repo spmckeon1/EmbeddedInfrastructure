@@ -44,3 +44,11 @@ namespace Text {
   String sourceToStr(Source source);
 
 }
+
+namespace GPIO {
+  bool readPin(uint8_t pin, bool lastState, uint8_t debounceTime);
+}
+
+namespace MATH {
+unsigned long suli(unsigned long minuend, unsigned long subtrahend);
+}

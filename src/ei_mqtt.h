@@ -1,4 +1,4 @@
-#pragma once
+ #pragma once
 
 // -----------------------------------------------------------------------------
 // EmbeddedInfrastructure
@@ -90,6 +90,8 @@ public:
   bool configureFromJson(const JsonDocument& doc);
   const MqttConfig& config() const;
   void processMsg(const JsonDocument& doc);
+  void configToJson(JsonDocument& doc) const;
+
 
 private:
   enum class Owner {
@@ -115,7 +117,6 @@ private:
   void configureLastWill();
   void sendHeartbeat();
   void registerWithNodeRed();
-  void configToJson(JsonDocument& doc) const;
   bool jsonToConfig(const JsonDocument& doc);
   bool readCfgFromDisk();
   bool writeCfgToDisk();
@@ -124,7 +125,7 @@ private:
   void onMqttSubscribe(uint16_t packetId, uint8_t qos);
   void onMqttUnsubscribe(uint16_t packetId);
   void dumpConfiguration() const;
-  void processInboundMsg(const JsonDocument& doc);
+  void processInboundMsg(char* topic, const JsonDocument& doc);
   void missingField(const String& field, const String& json);
   void onMqttMessage(char* topic,
                      char* payload,

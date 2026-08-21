@@ -5,7 +5,6 @@
 #include <ei_storage.h>
 #include <ei_mqtt.h>
 #include <ei_network.h>
-#include <ei_ota.h>
 #include <ei_time.h>
 #include <ei_scheduler.h>
 #include <ei_system.h>
@@ -64,13 +63,14 @@ void EiSystem::evtLoop() {
 }
 
 bool EiSystem::bootStrap() {
-  logging.startup();                              // Logging destinations/config - MUST BE FIRST TO ALLOW LOGGING TO WORK
-  if(!storage.startup()) return false;            // Filesystem available
-  storage.createDirIfNotExist(appDirs.libCfgDir);
-  storage.createDirIfNotExist(appDirs.dataDir);
-  storage.createDirIfNotExist(appDirs.logDir);
-  storage.createDirIfNotExist(appDirs.appData);
-  return true;
+    logging.startup();                              // Logging destinations/config - MUST BE FIRST TO ALLOW LOGGING TO WORK
+    if(!storage.startup()) return false;            // Filesystem available
+    storage.createDirIfNotExist(appDirs.libCfgDir);
+    storage.createDirIfNotExist(appDirs.dataDir);
+    storage.createDirIfNotExist(appDirs.logDir);
+    storage.createDirIfNotExist(appDirs.appData);
+    storage.createDirIfNotExist(appDirs.htmlDir);
+    return true;
 }
 
 bool EiSystem::setup() {
@@ -79,7 +79,7 @@ bool EiSystem::setup() {
   if(!network.setup()) return false;
   if(!eiTime.setup()) return false;
   if(!mqtt.setup()) return false;
-  if(!ota.setup()) return false;
+  if(!web.setup()) return false;
   if(!ds18b20.setup()) return false;
 
   return true;
@@ -88,8 +88,7 @@ bool EiSystem::setup() {
 bool EiSystem::startup() {
   if(!network.startup()) return false;      // Load credentials, initialize WiFi state
   if(!mqtt.startup()) return false;
-  if(!web.startup()) return false;
-  if(!ota.startup()) return true;
+//  if(!web.startup()) return false;
   if(!ds18b20.startup()) return false;
   return true;
 }
@@ -99,36 +98,92 @@ bool EiSystem::startup() {
 /*-----  PROCESS AN INCOMING LIBRARY MSG  -----*/
 
 void EiSystem::processLibraryMsg(const JsonDocument& doc) {
-  String service = doc["service"].as<String>();                     // Determine the destination service.
-//  DUMP(service);
-  if (service == "network") {                                       // Route to the Network subsystem.
-//    DUMP("network");
+  TRACE();
+  String route = doc["route"].as<String>();
+  int separator = route.indexOf('/');
+  if (separator <= 0) {
+    logError(LS, ET::SYSTEM, "Library message has invalid route '" + route + "'.");
+    return;
+  }
+  String service = route.substring(0, separator);
+  if (service == "network") {
     network.processMsg(doc);
     return;
   }
-  if (service == "mqtt") {                                          // Route to the MQTT subsystem.
-//    DUMP(" mqtt");
+  if (service == "mqtt") {
     mqtt.processMsg(doc);
     return;
   }
-  if (service == "time") {                                          // Route to the Time subsystem.
-//    DUMP("time");
+  if (service == "time") {
     eiTime.processMsg(doc);
     return;
   }
-  if (service == "storage") {                                       // Route to the Storage subsystem.
-//    DUMP("storage");
+  if (service == "storage") {
     storage.processMsg(doc);
     return;
   }
-  if (service == "web") {                                           // Route to the Web subsystem.
-//    DUMP("web");
+  if (service == "web") {
     web.processMsg(doc);
     return;
   }
-  logError(LS, ET::MQTT,
-           "Received library message for unknown service '" +
-           service + "'.");
+  if (service == "system") {
+    eiSystem.processMsg(doc);
+      return;
+  }
+  logError(
+    LS,
+    ET::SYSTEM,
+    "Received library message for unknown service '" +
+    service + "' from route '" + route + "'."
+  );
+}
+
+/*-----  ROUTE AN OUTBOUND LIBRARY MSG  -----*/
+
+void EiSystem::routeOutboundMsg(const JsonDocument& doc) {
+    TRACE();
+
+    const char* receiver = doc["receiver"] | "";
+
+    if (strcmp(receiver, "web") == 0) {
+        web.webPubMsg(doc);
+        return;
+    }
+
+//    if (strcmp(receiver, "mqtt") == 0) {
+//        mqtt.processMsg(doc);
+//        return;
+//    }
+
+    logError(
+        LS,
+        ET::SYSTEM,
+        "Outbound message has unknown receiver '" +
+        String(receiver) +
+        "'."
+    );
+}
+
+/*-----  PROCESS AN INCOMING SYSTEM MSG  -----*/
+
+void EiSystem::processMsg(const JsonDocument& doc) {
+  TRACE();
+  String route = doc["route"].as<String>();
+  String command = doc["command"].as<String>();
+  if (route == "system/reboot") {
+    if (command == "SET") {
+        requestReboot("Web Setup requested reboot.");
+        return;
+    }
+    logError(
+        LS,
+        ET::SYSTEM,
+        "Unknown system command '" + command +
+        "' from route '" + route + "'."
+    );
+    return;
+  }
+  logError(LS, ET::SYSTEM, "Unknown system route '" + route + "'.");
 }
 
 /*-----  TRANSLATE FROM TEXT TO ENUM  -----*/
@@ -230,27 +285,30 @@ void EiSystem::setHeapMonitorInterval(uint16_t minutes)
 /*-----  PUBLIC: SET HEAP MONITORING ENABLED   -----*/
 
 void EiSystem::processExternalMsg(const JsonDocument& doc, Source source) {
-  if (!doc["owner"].is<const char*>()) {                          // ----- Validate the EI message envelope -----
-    logError(LS, ET::MQTT, "Received message missing mandatory field 'owner'.");
-    return;
-  }
-  if (!doc["origin"].is<const char*>()) {
-    logError(LS, ET::MQTT, "Received message missing mandatory field 'origin'.");
-    return;
-  }
-  if (!doc["command"].is<const char*>()) {
-    logError(LS, ET::MQTT, "Received message missing mandatory field 'command'.");
-    return;
-  }
+  TRACE();
+  String msg;
+  serializeJson(doc, msg);
+
+  logInfo(
+      LS,
+      ET::SYSTEM,
+      "External message received: " + msg
+  );
+
+  
+  
   String owner = doc["owner"].as<String>();
   if (owner == "library") {
-//    handleMsg(doc);
     processLibraryMsg(doc);
     return;
   }
   if (owner == "application") {
-    appHandleMsg(doc, source);
+    if (!appHandleMsg(doc, source)) {
+      String msg;
+      serializeJson(doc, msg);
+      logInfo(LS, ET::WEB, "Received Web message: " + msg);
+      logError(LS, ET::MQTT, "Application did not handle external command '" + msg + "'.");
+    }
     return;
-  }
-  logError(LS, ET::MQTT, "Received message with unknown owner '" + owner + "'.");
+  }  logError(LS, ET::MQTT, "Received external message with unknown owner '" + owner + "'.");
 }

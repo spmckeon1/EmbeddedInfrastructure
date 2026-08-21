@@ -106,7 +106,8 @@ public:
   bool configureFromJson(const JsonDocument& doc);
   bool configure(const NetworkConfig& cfg);
   void processMsg(const JsonDocument& doc);
-  
+  JsonDocument getWifiConfigMsg();
+
 private:
   NetworkConfig _config;
   NetworkState _state;;
@@ -127,6 +128,7 @@ private:
   static void saveConfigCallback();
   void updateConfigFromWiFiManager(NetworkConfig& cfg);
   Storage::WriteResult writeConfigToDisk();
+  
 };
 
 extern EiNetwork network;

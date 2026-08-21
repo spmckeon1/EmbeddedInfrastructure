@@ -130,7 +130,6 @@ String Text::stripPath(const char* filePath) {
 
 /*---------------  CONVERT SOURCE ID TO NAME  ---------------*/
 
-//String sourceIdtoName(Source source) {
 String Text::sourceToStr(Source source) {
   switch (source) {
     case Source::NOT_YET_SET: return "Not yet set";
@@ -142,3 +141,26 @@ String Text::sourceToStr(Source source) {
 //  return"ERROR: Unknown source: " + String(source);
 }
 
+/***************  NAMESPACE GPIO  ****************/
+
+/*---------------  READ A GPIO PIN  ---------------*/
+
+bool GPIO::readPin(uint8_t pin, bool lastState, uint8_t debounceTime) {
+  bool firstState = digitalRead(pin);
+  if (debounceTime > 0)
+    delay(debounceTime);
+  bool secondState = digitalRead(pin);
+  if (firstState == secondState)
+    return secondState;
+  return lastState;
+}
+
+/***************  NAMESPACE GPIO  ****************/
+
+/*---------------  SUBTRACT 2 UNSIGNED NUMBERS  ---------------*/
+
+unsigned long MATH::suli(unsigned long minuend, unsigned long subtrahend) {
+  if (subtrahend > minuend)
+    return 0;
+  return minuend - subtrahend;
+}
