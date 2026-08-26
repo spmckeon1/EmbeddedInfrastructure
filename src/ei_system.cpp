@@ -1,12 +1,13 @@
 
 #include <Arduino.h>
-#include <ei_appPolicy.h>
+#include <ei_appFramework.h>
 #include <ei_ds18b20.h>
 #include <ei_storage.h>
 #include <ei_mqtt.h>
 #include <ei_network.h>
 #include <ei_time.h>
 #include <ei_scheduler.h>
+#include <ei_storage.h>
 #include <ei_system.h>
 #include <ei_web.h>
 
@@ -63,14 +64,29 @@ void EiSystem::evtLoop() {
 }
 
 bool EiSystem::bootStrap() {
-    logging.startup();                              // Logging destinations/config - MUST BE FIRST TO ALLOW LOGGING TO WORK
-    if(!storage.startup()) return false;            // Filesystem available
-    storage.createDirIfNotExist(appDirs.libCfgDir);
-    storage.createDirIfNotExist(appDirs.dataDir);
-    storage.createDirIfNotExist(appDirs.logDir);
-    storage.createDirIfNotExist(appDirs.appData);
-    storage.createDirIfNotExist(appDirs.htmlDir);
-    return true;
+  _rebootReasonFname = appDirs.dataDir + "/rebootReason.json";
+  logging.startup();                                            // Logging destinations/config - MUST BE FIRST TO ALLOW LOGGING TO WORK
+  if(!storage.startup()) return false;                          // Filesystem available
+  
+  JsonDocument doc;
+  if (storage.exists(_rebootReasonFname)) {
+    if (storage.readJsonFile(_rebootReasonFname.c_str(), doc, LN)) {
+      String reason = doc["reason"].as<String>();
+      logInfo(LS, ET::SYSTEM, "Reason for the last reboot was: " + reason);
+      storage.deleteFile(_rebootReasonFname.c_str(), LN);
+    } else {
+      logError(LS, ET::SYSTEM, "Unable to read reboot reason file.");
+    }
+  } else {
+    logInfo(LS, ET::SYSTEM, "No known reason for the previous reboot.");
+  }
+  
+  storage.createDirIfNotExist(appDirs.libCfgDir);
+  storage.createDirIfNotExist(appDirs.dataDir);
+  storage.createDirIfNotExist(appDirs.logDir);
+  storage.createDirIfNotExist(appDirs.appData);
+  storage.createDirIfNotExist(appDirs.htmlDir);
+  return true;
 }
 
 bool EiSystem::setup() {
@@ -122,8 +138,8 @@ void EiSystem::processLibraryMsg(const JsonDocument& doc) {
     storage.processMsg(doc);
     return;
   }
-  if (service == "web") {
-    web.processMsg(doc);
+  if (service == "appFramework") {
+    appFramework.processMsg(doc);
     return;
   }
   if (service == "system") {
@@ -172,15 +188,12 @@ void EiSystem::processMsg(const JsonDocument& doc) {
   String command = doc["command"].as<String>();
   if (route == "system/reboot") {
     if (command == "SET") {
-        requestReboot("Web Setup requested reboot.");
-        return;
+      String reason = doc["data"]["reason"].as<String>();
+      requestReboot(reason);
+      return;
     }
-    logError(
-        LS,
-        ET::SYSTEM,
-        "Unknown system command '" + command +
-        "' from route '" + route + "'."
-    );
+    logError(LS,
+      ET::SYSTEM, "Unknown system command '" + command + "' from route '" + route + "'.");
     return;
   }
   logError(LS, ET::SYSTEM, "Unknown system route '" + route + "'.");
@@ -235,6 +248,13 @@ void EiSystem::requestReboot(const String& reason, bool immediate) {
   }
   logInfo(LS, ET::SYSTEM, "Reboot requested: " + reason);
   _state.rebootReason = reason;
+  JsonDocument doc;
+  doc["reason"] = reason;
+  Storage::WriteResult result = storage.writeJsonFile(_rebootReasonFname.c_str(), doc, LN);
+  if (result != Storage::WriteResult::Success) {
+    logError(LS, ET::SYSTEM, "Unable to save reboot reason. Reboot request denied.");
+    return;
+  }
   if (immediate) {
     performReboot();
     return;
@@ -284,7 +304,7 @@ void EiSystem::setHeapMonitorInterval(uint16_t minutes)
 
 /*-----  PUBLIC: SET HEAP MONITORING ENABLED   -----*/
 
-void EiSystem::processExternalMsg(const JsonDocument& doc, Source source) {
+void EiSystem::processExternalMsg(const JsonDocument& doc) {
   TRACE();
   String msg;
   serializeJson(doc, msg);
@@ -294,16 +314,13 @@ void EiSystem::processExternalMsg(const JsonDocument& doc, Source source) {
       ET::SYSTEM,
       "External message received: " + msg
   );
-
-  
-  
   String owner = doc["owner"].as<String>();
   if (owner == "library") {
     processLibraryMsg(doc);
     return;
   }
   if (owner == "application") {
-    if (!appHandleMsg(doc, source)) {
+    if (!appHandleMsg(doc)) {
       String msg;
       serializeJson(doc, msg);
       logInfo(LS, ET::WEB, "Received Web message: " + msg);

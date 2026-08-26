@@ -21,6 +21,7 @@
 #include <ei_network.h>
 #include <ei_types.h>
 #include <ei_network.h>
+#include <ei_utilities.h>
 
 AsyncWebServer server(80);
 //AsyncWebSocket ws("/ws");
@@ -48,6 +49,7 @@ static void onWifiConnected() {
 /*-----    SETUP THE WEB SYSTEM   -----*/
 
 bool Web::setup() {
+  logInfo(LS, ET::WEB, "Web setup() is running.");
   if (!startWebSocket())
     return false;
   ElegantOTA.begin(&_server);
@@ -58,6 +60,7 @@ bool Web::setup() {
 /*-----    DO THE WEB STARTUP ACTIONS   -----*/
 
 bool Web::startup() {
+  logInfo(LS, ET::WEB, "Web startup() is running.");
   if(!startWebServer()) return false;
   return true;
 }
@@ -73,42 +76,6 @@ void Web::evtLoop() {
     //   - client cleanup
 }
 
-/*-----  PROCESS A INCOMING WEB TEXT MESSAGE  -----*/
-
-void Web::processWsMessage(uint8_t* data, size_t len) {
-    String s((char*)data, len);
-    JsonDocument doc;
-    DeserializationError error = deserializeJson(doc, s);
-    if (error) {
-        logError(LS, ET::WEB, "Invalid WebSocket JSON: " + String(error.c_str()));
-        return;
-    }
-    if (!doc["owner"].is<const char*>()) {
-        logError(LS, ET::WEB, "WebSocket message missing required field 'owner'.");
-        return;
-    }
-    if (!doc["route"].is<const char*>()) {
-        logError( LS, ET::WEB, "WebSocket message missing required field 'route'.");
-        return;
-    }
-    if (!doc["command"].is<const char*>()) {
-        logError(LS, ET::WEB, "WebSocket message missing required field 'command'.");
-        return;
-    }
-    if (!doc["data"].is<JsonObject>()) {
-        logError(LS, ET::WEB,"WebSocket message missing required field 'data'.");
-        return;
-    }
-    eiSystem.processExternalMsg(doc, Source::WEB);
-}
-
-/*-----  PROCESS A INCOMING WEB BINARY MESSAGE  -----*/
-
-void Web::processWsBinary(uint8_t* data, size_t len) {
-  logInfo(LS, ET::WEB, "Received WebSocket binary data: " + String(len) + " bytes.");
-  storage.processBinary(data, len);
-}
-
 /*-----    HANDLE THE WEB EVENT   -----*/
 
 void Web::onWsEvent(AsyncWebSocket* server,
@@ -119,27 +86,63 @@ void Web::onWsEvent(AsyncWebSocket* server,
                       size_t len)
 {
   switch (type) {
-    case WS_EVT_DATA: {
-        AwsFrameInfo *info = (AwsFrameInfo*)arg;
-        if (info->opcode == WS_TEXT) {
-            processWsMessage(data, len);
-        }
-        else if (info->opcode == WS_BINARY) {
-          logInfo(LS, ET::WEB, "Received WebSocket binary data.");
-          processWsBinary(data, len);
-        }
-        break;
-    }    case WS_EVT_CONNECT:
-      // Optional logging
-      break;
-
-    case WS_EVT_DISCONNECT:
-        // Optional logging
-        break;
-
-    default:
-        break;
+  case WS_EVT_DATA: {
+    AwsFrameInfo* info = (AwsFrameInfo*)arg;
+    if (info->opcode == WS_TEXT) {
+      JsonDocument doc;
+      if (!validateTxtMsg(data, len, doc))
+          break;
+      eiSystem.processExternalMsg(doc);
     }
+    else if (info->opcode == WS_BINARY) {
+      logInfo(LS, ET::WEB, "Received WebSocket binary data: " + String(len) + " bytes.");
+      storage.processBinary(data, len);
+    }
+    break;
+  }
+  case WS_EVT_DISCONNECT:
+    // Optional logging
+    break;
+  default:
+    break;
+  }
+}
+
+/*--------------- VALIDATE AN INCOMING MESSAGE ---------------*/
+
+bool Web::validateTxtMsg(uint8_t* data, size_t len, JsonDocument& doc) {
+  String json((char*)data, len);
+  DeserializationError error = deserializeJson(doc, json);
+  if (error) {
+    logError(LS, ET::WEB, "Received invalid WebSocket JSON: " + String(error.c_str()) + ". Message: " + json);
+    return false;
+  }
+  if (!verifyRecMsg(doc, json, ET::WEB))
+    return false;
+  doc["source"] = Text::sourceToStr(_source);
+  return true;
+}
+
+/*--------------- VERIFY AN INCOMING MESSAGE HAS THE REQUIRED ELEMENTS ---------------*/
+
+bool Web::verifyRecMsg(const JsonDocument& doc, const String& json, const char* eventType) {
+  if (!doc[ET::WEB, "owner"].is<const char*>()) {
+    Json::missingField(eventType, "owner", json);
+    return false;
+  }
+  if (!doc["route"].is<const char*>()) {
+    Json::missingField(ET::WEB, "route", json);
+    return false;
+  }
+  if (!doc["command"].is<const char*>()) {
+    Json::missingField(ET::WEB, "command", json);
+    return false;
+  }
+  if (doc["data"].isNull()) {
+    Json::missingField(ET::WEB, "data", json);
+    return false;
+  }
+  return true;
 }
 
 /*-----    SEND A MESSAGE TO A WEB PAGE   -----*/
@@ -157,35 +160,6 @@ void Web::webPubMsg(const JsonDocument& doc) {
   String message;
   serializeJson(doc, message);
   sendWS_msg(message, nullptr);
-}
-
-/*-----    DISPATCH AN INCOMNG WIFI SETUP EVENT   -----*/
-
-bool Web::hdlWiFiSetupEvent(String s, AsyncWebSocketClient* client) {
-  logInfo(LS, ET::WEB,"Incoming string: " + s);
-  if (handleConfigurationUpdate(s))      return true;
-  if (handleIncomingFile(s))             return true;
-  if (handleDownloadLocation(s, client)) return true;
-  if (handleFileSizeRequest(s, client))  return true;
-}
-
-/*-----    HANDLE THE WIFI SETUP CONFIGURATION EVENT   -----*/
-
-bool Web::handleConfigurationUpdate(String s) {
-  if (s.indexOf("cfgDataJSON:") == -1) return false;
-  int jsonStartPos = s.indexOf("cfgDataJSON:") + 12;
-  String jsonPayload = s.substring(jsonStartPos);
-  logInfo(LS, ET::WEB, "Isolated JSON Text Block: '" + jsonPayload);
-  JsonDocument doc;
-  DeserializationError error = deserializeJson(doc, jsonPayload);
-  if (error) {
-    logError(LS, ET::WEB, "ERROR: Web form JSON parsing failed! Reason: " + String(error.c_str()));
-    return true;
-  }
-  if (!network.configureFromJson(doc)) return true;
-  if (!mqtt.configureFromJson(doc)) return true;
-  logInfo(LS, ET::WEB, "Web configuration successfully updated.");
-  return true;
 }
 
 /*-----    HANDLE THE INCOMING FLE   -----*/
@@ -226,76 +200,6 @@ bool Web::handleFileSizeRequest(String s, AsyncWebSocketClient* client) {
   if (s.indexOf("fileSizePlease:") == -1) return false;
   client->text("requestedFileSizeIs:" + storage.getFileSize(_incomingFilePath.c_str()));
   return true;
-}
-
-
-void Web::processSetupMsg(const JsonDocument& doc) {
-  logInfo(LS, ET::WEB, "Processing Web SETUP request.");
-
-  JsonDocument response;
-
-  response["owner"] = "library";
-  response["route"] = "web/setup";
-  response["command"] = "SETUP";
-
-  JsonObject data = response["data"].to<JsonObject>();
-
-  // Page information
-  data["pageTitle"] = String(appIDs.pageTitle) + " Setup";
-  data["pageHeader"] = String(appIDs.pageHeader) + " Setup";
-
-  // WiFi
-  JsonDocument wifiMsg = network.getWifiConfigMsg();
-  JsonObject wifiData = data["wifi"].to<JsonObject>();
-  wifiData["ssid"] = wifiMsg["data"]["ssid"];
-  wifiData["password"] = wifiMsg["data"]["password"];
-  // MQTT
-  JsonDocument mqttMsg;
-  mqtt.configToJson(mqttMsg);
-  JsonObject mqttData = data["mqtt"].to<JsonObject>();
-  mqttData["host"] = mqttMsg["host"];
-  mqttData["port"] = mqttMsg["port"];
-  mqttData["brokerUser"] = mqttMsg["brokerUser"];
-  mqttData["brokerPwd"] = mqttMsg["brokerPwd"];
-  // File destinations
-  JsonArray fileDestinations = data["fileDestinations"].to<JsonArray>();
-  storage.buildDirectoryList(fileDestinations, "/");
-  webPubMsg(response);
-  TRACE();
-}
-/*-----    HANDLE A NEW WIFI SETUP WEB PAGE   -----*/
-
-void Web::initNewWiFiPg(String s, AsyncWebSocketClient *client) {
-  String outboundData = "";
-  String CUID = s.substring(s.lastIndexOf(":") + 1);                                              // split the clients UID out of the string
-  String ip = client->remoteIP().toString();                                                      // get its IP address
-  logInfo(LS, ET::WEB, "A new WiFi setup web page has joined.  ClientId:'"+String(client->id())+           // log the new web page that joined
-              "', Type :'WiFi setup', IP Address:'"+ ip + "', CUID:'" + CUID + "'");
-  sendWS_msg("serverip:" + network.getIPAddress(), client);                                       // send the client the servers ip address
-  sendWS_msg("clientip:" + ip, client);                                                           // send the client its ip address
-  sendWS_msg(String("pgHeader:") + appIDs.pageHeader, client);                                    // send the page header
-//  sendWS_msg("listDir:" + storage.readFile(allDirectoriesToFile.c_str(), true), client);
-  gatherWiFiSetupData(outboundData);
-  sendWS_msg("initWebDataJSON:" + outboundData, client);                                          // send the web page the info needed to setup the data fields
- }
-
-/*---------------  GATHER WIFI SETUP DATA  ---------------*/
-
-void Web::gatherWiFiSetupData(String& jsonOutput) {
-    JsonDocument doc;
-
-    const NetworkConfig& networkCfg = network.config();
-    const MqttConfig& mqttCfg = mqtt.config();
-
-    doc["networkSsid"] = networkCfg.ssid;
-    doc["networkPass"] = networkCfg.password;
-
-    doc["mqttServer"] = mqttCfg.host;
-    doc["mqttPort"]   = mqttCfg.port;
-    doc["mqttUser"]   = mqttCfg.brokerUser;
-    doc["mqttPass"]   = mqttCfg.brokerPwd;
-
-    serializeJson(doc, jsonOutput);
 }
 
 /*---------------  START THE WEB SERVER  ---------------*/
@@ -416,17 +320,6 @@ const char *Web::getContentType(const String &path) const {
     return "application/octet-stream";
 }
 
-/*-----  PROCESS AN INCOMING MSG  -----*/
-
-void Web::processMsg(const JsonDocument& doc) {
-    String route = doc["route"].as<String>();
-    String command = doc["command"].as<String>();
-
-    if (route == "web/setup" && command == "SETUP") {
-        processSetupMsg(doc);
-        return;
-    }
-}
 /*-----  ADD THE NEW CLIENT TRACKING INFORMATION  -----*/
 
 WebClient* Web::addClient(AsyncWebSocketClient* client) {

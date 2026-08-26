@@ -8,7 +8,7 @@
 
 #include <ei_events.h>
 #include <ei_scheduler.h>
-#include <ei_appPolicy.h>
+#include <ei_appFramework.h>
 #include <ei_network.h>
 #include <ei_storage.h>
 #include <ei_utilities.h>

@@ -36,19 +36,14 @@ public:
   void setDownloadingFile(bool downloading) { _downloadingFile = downloading; }
   void sendWS_msg(const String& message, AsyncWebSocketClient* client);
   void webPubMsg(const JsonDocument& doc);
-  bool hdlWiFiSetupEvent(String s,AsyncWebSocketClient* client);
-  void initNewWiFiPg(String s, AsyncWebSocketClient *client);
   bool downloadingFile() const;
   const char *getContentType(const String &path) const;
-  void processMsg(const JsonDocument& doc);
   void onWsEvent(AsyncWebSocket* server,
                         AsyncWebSocketClient* client,
                         AwsEventType type,
                         void* arg,
                         uint8_t* data,
-                        size_t len);bool handleConfigurationUpdate(String s);
-
-
+                        size_t len);
 
 private:
   AsyncWebServer _server{80};
@@ -56,14 +51,13 @@ private:
   String _incomingFilePath;
   String _downloadLocation;
   bool _downloadingFile = false;
-  
+  const Source _source = Source::WEB;
   static constexpr uint8_t MAX_WEB_CLIENTS = 10;
   WebClient _clients[MAX_WEB_CLIENTS];
 
-  void processWsMessage(uint8_t* data, size_t len);
-  void processWsBinary(uint8_t* data, size_t len);
   bool handleIncomingFile(String s);
-  void gatherWiFiSetupData(String &jsonOutput);
+  bool validateTxtMsg(uint8_t* data, size_t len, JsonDocument& doc);
+  bool verifyRecMsg(const JsonDocument& doc, const String& json, const char* eventType);
   bool handleDownloadLocation(String s, AsyncWebSocketClient* client);
   bool handleFileSizeRequest(String s, AsyncWebSocketClient* client);
   bool startWebServer();
@@ -81,7 +75,6 @@ private:
   void clearClient(WebClient* client);
   WebClient* addClient(AsyncWebSocketClient* client);
   bool setClientPage(AsyncWebSocketClient* client, const String& pgName);
-  void processSetupMsg(const JsonDocument& doc);
 
 };
 

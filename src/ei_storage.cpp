@@ -501,6 +501,12 @@ Storage::EnsureFileResult Storage::ensureFileExists(const String& fileName, cons
   return EnsureFileResult::Created;
 }
 
+/*---------------  PUBLIC: BOOL FORM OF IF FILE DOES/DOES NOT EXIST  ---------------*/
+
+bool Storage::ensureFileExistsBool(const String& fileName, const JsonDocument& doc, int from) {
+    return ensureFileExists(fileName, doc, from) != EnsureFileResult::Error;
+}
+
 /*---------------  PUBLIC - IS THIS FILE OM THE DISK  ---------------*/
 
 bool Storage::fileExists(const String& fileName) const {

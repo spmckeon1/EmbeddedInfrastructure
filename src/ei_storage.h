@@ -92,6 +92,7 @@ public:
   bool createDirIfNotExist(String dirName);
   EnsureFileResult ensureFileExists(const String& fileName, const JsonDocument& doc, int from);
   bool fileExists(const String& fileName) const;
+  bool ensureFileExistsBool(const String& fileName, const JsonDocument& doc, int from);
   bool exists(const char* path) const;
   bool exists(const String& path) const;
   const char* fileSystemName() const;

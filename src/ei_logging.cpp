@@ -1,7 +1,7 @@
 
 #include <Arduino.h>
 #include <ei_types.h>
-#include <ei_appPolicy.h>
+#include <ei_appFramework.h>
 #include <ei_logging.h>
 #include <ei_storage.h>
 #include <ei_time.h>

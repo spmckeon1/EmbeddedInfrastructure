@@ -1,8 +1,9 @@
 #pragma once
 
+#include <ArduinoJson.h>
+
 //#include <ezTime.h>
 #include <ei_types.h>
-#include <ei_mqtt.h>
 
 struct AppDirPolicy {
   String libCfgDir = "/libCfg";
@@ -23,6 +24,7 @@ struct AppIDs {
   const char* pageTitle;
   const char* pageHeader;
   const char* uploadPage;
+  const char* mqttTopic;
 };
 
 struct MqttLwtPolicy {
@@ -39,6 +41,19 @@ struct MqttHeartbeatPolicy {
   uint32_t interval = 60000;
   uint32_t timeout  = 180000;  // Seconds before considered offline
 };
+
+class AppFramework
+{
+public:
+  void processMsg(const JsonDocument& doc);
+  
+private:
+  void initSetupPage(const JsonDocument& doc);
+
+};
+
+extern AppFramework appFramework;
+
 
 extern AppDirPolicy appDirs;
 extern AppFnamePolicy appFnames;

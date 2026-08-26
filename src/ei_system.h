@@ -28,7 +28,7 @@ public:
   void getFreeHeap();
   void enableHeapMonitor(bool enabled);
   void setHeapMonitorInterval(uint16_t minutes);
-  void processExternalMsg(const JsonDocument& doc, Source source);             // msgs comming in libraries that receive outside commuications
+  void processExternalMsg(const JsonDocument& doc);             // msgs comming in libraries that receive outside commuications
   void processMsg(const JsonDocument& doc);
 
 private:
@@ -40,12 +40,14 @@ private:
     Time,
     Storage,
     Web,
-    Logging
+    Logging,
+    appFramework
   };
   
   void performReboot();
   SystemState _state;
   SystemConfig _config;
+  String _rebootReasonFname;
   
   static Service serviceFromString(const char* s);
   static const char* serviceToString(Service service);
@@ -55,5 +57,5 @@ private:
 
 extern EiSystem eiSystem;
 
-extern bool appHandleMsg(const JsonDocument& doc, Source source);
+extern bool appHandleMsg(const JsonDocument& doc);
 

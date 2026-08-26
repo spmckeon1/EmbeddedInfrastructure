@@ -91,7 +91,8 @@ public:
   const MqttConfig& config() const;
   void processMsg(const JsonDocument& doc);
   void configToJson(JsonDocument& doc) const;
-
+  void wifiConnected();
+  void wifiDisconnected();
 
 private:
   enum class Owner {
@@ -104,6 +105,7 @@ private:
   MqttState  _state;
   MqttStats  _stats;
   String _heartbeatPayload;
+  const Source _source = Source::NODE_RED;
   static const String HEARTBEAT_TOPIC;
   AsyncMqttClient _client;
   String _configFileName = "";
@@ -111,7 +113,9 @@ private:
   uint16_t _maxSubCnt = 0;
   uint16_t _subCnt    = 0;
 
-  void buildHeartbeatPayload();
+  bool setupEvents();
+  bool setupConfiguration();
+  void setupClientCallbacks();  void buildHeartbeatPayload();
   void applyConfiguration();
   void connect();
   void configureLastWill();
@@ -126,7 +130,7 @@ private:
   void onMqttUnsubscribe(uint16_t packetId);
   void dumpConfiguration() const;
   void processInboundMsg(char* topic, const JsonDocument& doc);
-  void missingField(const String& field, const String& json);
+  bool verifyRecMsg(const JsonDocument& doc, const String& json);
   void onMqttMessage(char* topic,
                      char* payload,
                      AsyncMqttClientMessageProperties properties,
@@ -139,7 +143,11 @@ private:
   void dumpConfig() const;
   Owner ownerFromString(const char* s);
   const char* ownerToString(Owner owner);
-
+  
 };
 
 extern EiMqtt mqtt;
+
+static void onWifiConnected();
+static void onWifiDisconnected();
+

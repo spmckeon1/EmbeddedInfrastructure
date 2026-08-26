@@ -20,6 +20,13 @@ using DeviceId = uint16_t;
 // Common Enumerations
 //======================================================
 
+enum class Source {
+  NOT_YET_SET = -1,
+  WEB,
+  NODE_RED,
+  APP_STARTUP
+};
+
 
 
 //======================================================

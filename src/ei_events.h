@@ -33,15 +33,23 @@ using EiEventHandler = void (*)();
 
 class EiEvents {
 public:
-    bool startup();
 
-    bool on(EiEvent event, EiEventHandler handler);
-    bool off(EiEvent event, EiEventHandler handler);
+  static constexpr uint8_t MAX_HANDLERS_PER_EVENT = 4;
 
-    void notify(EiEvent event);
+  bool startup();
+
+  bool on(EiEvent event, EiEventHandler handler);
+  bool off(EiEvent event, EiEventHandler handler);
+
+  void notify(EiEvent event);
 
 private:
-    EiEventHandler _handlers[static_cast<uint16_t>(EiEvent::Count)] = {};
+
+  static const char* eventToString(EiEvent event);
+
+  EiEventHandler _handlers[
+    static_cast<uint16_t>(EiEvent::Count)
+  ][MAX_HANDLERS_PER_EVENT] = {};
 };
 
 extern EiEvents eiEvents;

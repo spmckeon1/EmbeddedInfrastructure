@@ -4,13 +4,14 @@
  
  */
 
-
-
 #include <Arduino.h>
 #include <ArduinoJson.h>
-#include <ei_time.h>
-#include <ei_network.h>
+
 #include <ei_utilities.h>
+
+#include <ei_logging.h>
+#include <ei_network.h>
+#include <ei_time.h>
 
 /***************  NAMESPACE APPINFO  ****************/
 
@@ -96,6 +97,10 @@ String Json::jsonToString(const JsonDocument& doc) {
     String json;
     serializeJson(doc, json);
     return json;
+}
+
+void Json::missingField(const char* eventType, const String& field, const String& json) {
+    logError(LS, eventType, "Message missing required field '" + field + "'. Received: " + json);
 }
 
 /***************  NAMESPACE TEXT  ****************/

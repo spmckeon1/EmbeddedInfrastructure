@@ -5,7 +5,7 @@
 //  Created by Stephen McKeon on 7/26/26.
 //
 #include <ArduinoTrace.h>
-#include <ei_appPolicy.h>
+#include <ei_appFramework.h>
 #include <ei_logging.h>
 #include <ei_network.h>
 #include <ei_storage.h>
@@ -25,7 +25,9 @@ bool EiMqtt::evtLoop() {
   
   RunTime loopTimer = {IntervalType::IT_SECOND, 5, -1};
   if(!_state.connected && scheduler.isTimeToRun(loopTimer)) {
+    logInfo(LS, ET::MQTT, "Attempting MQTT cnnection.");
     connect();
+
   }
   if (_state.connected) sendHeartbeat();
   
@@ -50,55 +52,129 @@ bool EiMqtt::startup() {
     connect();
   }
   buildHeartbeatPayload();
+  logInfo(LS, ET::MQTT, "MQTT startup() is complete.");
+
   return true;
 }
 
 /*-----  MAKE SURE THE MQTT LIBRARY IS READY TO GO  -----*/
 
 bool EiMqtt::setup() {
-  JsonDocument doc;
-  configToJson(doc);
-  _configFileName = appDirs.libCfgDir + "/ei_mqttCfg.json";
   logInfo(LS, ET::MQTT, "Starting MQTT subsystem...");
-  Storage::EnsureFileResult result =                                        // Ensure the configuration file exists.
-            storage.ensureFileExists(_configFileName.c_str(), doc, LN);
-  switch (result) {
-    case Storage::EnsureFileResult::Created:
-      logInfo(LS, ET::MQTT, "Created default MQTT configuration file.");
-      break;
-    case Storage::EnsureFileResult::AlreadyExists:
-      break;                                                                  // Nothing to do
-    case Storage::EnsureFileResult::Error:
-      logError(LS, ET::MQTT, "Unable to ensure MQTT configuration file exists.");
-      return false;
-  }
-  if(!readCfgFromDisk()) {
-    logError(LS, ET::MQTT, "Unable to read MQTT configuration.");
+  if (!setupEvents())
     return false;
-  }
-  applyConfiguration();
-  
-  _client.onConnect([this](bool sessionPresent) { onMqttConnect(sessionPresent);});   // Register MQTT callbacks.
-  _client.onDisconnect([this](AsyncMqttClientDisconnectReason reason) { onMqttDisconnect(reason);});
-  _client.onSubscribe([this](uint16_t packetId, uint8_t qos) { onMqttSubscribe(packetId, qos);});
-  _client.onUnsubscribe([this](uint16_t packetId) { onMqttUnsubscribe(packetId);});
-  _client.onMessage([this](char* topic,
-                           char* payload,
-                           AsyncMqttClientMessageProperties properties,
-                           size_t len,
-                           size_t index,
-                           size_t total) {
-      onMqttMessage(topic, payload, properties, len, index, total);
-  });
-  _client.onPublish([this](uint16_t packetId) {
-    onMqttPublish(packetId);
-  });
-  configureLastWill();                                                      // Configure the Last Will and Testament.
+  if (!setupConfiguration())
+    return false;
+  setupClientCallbacks();
+  configureLastWill();
   logInfo(LS, ET::MQTT, "MQTT subsystem initialized.");
   return true;
 }
 
-/*-----  APPLY THE CINFIGURATION DATA TO THE AsyncMqttClient LIBRARY  -----*/
+/*-----  TAKE CARE OF REGISTERING FOR THE NEEDED EI LIBRARY EVENTS  -----*/
+
+bool EiMqtt::setupEvents() {
+  if (!eiEvents.on(EiEvent::WifiConnected, onWifiConnected))
+    return false;
+  if (!eiEvents.on(EiEvent::WifiDisconnected, onWifiDisconnected))
+    return false;
+  return true;
+}
+
+/*-----  WHEN WIFICONECTED EVENT IS RECEIVED  -----*/
+
+void onWifiConnected() {
+  mqtt.wifiConnected();
+}
+
+/*-----  WHEN WIFIDISCONECTED EVENT IS RECEIVED  -----*/
+
+void onWifiDisconnected() {
+  mqtt.wifiDisconnected();
+}
+
+/*-----  LAUNCH CONNECT WHEN WIFI IS ACTIVE  -----*/
+
+void EiMqtt::wifiConnected() {
+  if (!_state.operational)
+    return;
+  if (_state.connected)
+    return;
+  connect();
+}
+
+/*-----  HANDLE THE WIFI DISCONNECTED ACTIONS  -----*/
+
+void EiMqtt::wifiDisconnected() {
+  _state.connected = false;
+}
+
+/*-----  TAKE CARE OF SETUP CONFIGURATION ITEMS  -----*/
+
+bool EiMqtt::setupConfiguration() {
+  JsonDocument doc;
+  configToJson(doc);
+  _configFileName = appDirs.libCfgDir + "/ei_mqttCfg.json";
+  if (!storage.ensureFileExistsBool(_configFileName.c_str(), doc, LN)) {
+    return false;
+  }
+  if (!readCfgFromDisk()) {
+    logError(LS, ET::MQTT, "Unable to read MQTT configuration.");
+    return false;
+  }
+  applyConfiguration();
+  return true;
+}
+/*-----  TAKE CARE OF THE NEED CALLBACKS  -----*/
+
+void EiMqtt::setupClientCallbacks() {
+
+  _client.onConnect(
+      [this](bool sessionPresent) {
+        onMqttConnect(sessionPresent);
+      });
+
+  _client.onDisconnect(
+      [this](AsyncMqttClientDisconnectReason reason) {
+        onMqttDisconnect(reason);
+      });
+
+  _client.onSubscribe(
+      [this](uint16_t packetId, uint8_t qos) {
+        onMqttSubscribe(packetId, qos);
+      });
+
+  _client.onUnsubscribe(
+      [this](uint16_t packetId) {
+        onMqttUnsubscribe(packetId);
+      });
+
+  _client.onMessage(
+      [this](
+          char* topic,
+          char* payload,
+          AsyncMqttClientMessageProperties properties,
+          size_t len,
+          size_t index,
+          size_t total) {
+
+        onMqttMessage(
+            topic,
+            payload,
+            properties,
+            len,
+            index,
+            total
+        );
+      });
+
+  _client.onPublish(
+      [this](uint16_t packetId) {
+        onMqttPublish(packetId);
+      });
+}
+
+/*-----  APPLY THE CONFIGURATION DATA TO THE AsyncMqttClient LIBRARY  -----*/
 
 void EiMqtt::applyConfiguration() {
   _client.setServer(_config.host.c_str(), _config.port);
@@ -276,12 +352,26 @@ void EiMqtt::processInboundMsg(char* topic, const JsonDocument& doc) {
     eiSystem.processExternalMsg(doc, Source::NODE_RED);
 }
 
-/*---------------  HELPER TO LOG ERRORS ON M=MQTT MSG RECEIPT  ---------------*/
+/*---------------  VERIFY AN INCOMING MSG HAS THE RIGHT ELEMENTS  ---------------*/
 
-void EiMqtt::missingField(const String& field, const String& json) {
-    logError(LS, ET::MQTT,
-             "MQTT message missing required field '" +
-             field + "'. Received: " + json);
+bool EiMqtt::verifyRecMsg(const JsonDocument& doc, const String& json) {
+  if (!doc["owner"].is<const char*>()) {
+    Json::missingField(ET::MQTT, "owner", json);
+    return false;
+  }
+  if (!doc["route"].is<const char*>()) {
+    Json::missingField(ET::MQTT, "route", json);
+    return false;
+  }
+  if (!doc["command"].is<const char*>()) {
+    Json::missingField(ET::MQTT, "command", json);
+    return false;
+  }
+  if (doc["data"].isNull()) {
+    Json::missingField(ET::MQTT, "data", json);
+    return false;
+  }
+  return true;
 }
 
 /*---------------  ON MQTT MESSAGE  ---------------*/
@@ -293,6 +383,10 @@ void EiMqtt::onMqttMessage(char* topic,
                            size_t index,
                            size_t total)
 {
+  DUMP(topic);
+  Serial.print("MQTT PAYLOAD: ");
+  Serial.write((uint8_t*)payload, len);
+  Serial.println();
   String json(payload, len);
   JsonDocument doc;
   DeserializationError err = deserializeJson(doc, json);
@@ -300,23 +394,10 @@ void EiMqtt::onMqttMessage(char* topic,
     logError(LS, ET::MQTT, "Received invalid JSON. Error: " + String(err.c_str()) + ". Message: " + json);
     return;
   }
-  if (!doc["owner"].is<const char*>()) {
-    missingField("owner", json);
-    return;
-  }
-  if (!doc["route"].is<const char*>()) {
-    missingField("route", json);
-    return;
-  }
-  if (!doc["command"].is<const char*>()) {
-    missingField("command", json);
-    return;
-  }
-  if (!doc["data"].is<JsonObject>()) {
-    missingField("data", json);
-    return;
-  }
-  eiSystem.processExternalMsg(doc, Source::NODE_RED);
+
+  if(!verifyRecMsg(doc, json)) return;
+  doc["source"] = Text::sourceToStr(_source);
+  eiSystem.processExternalMsg(doc);
 }
 
 /*---------------  ON MQTT PUBLISH  ---------------*/
@@ -417,6 +498,7 @@ bool EiMqtt::addSubscription(const String& name, const String& topic, uint8_t qo
   _subscriptions[_subCnt].topic = topic;
   _subscriptions[_subCnt].qos   = qos;
   _subCnt++;
+  logInfo(LS, ET::MQTT, "Adding subscription '" + name + "': " + topic + " (QoS " + String(qos) + ")");
   return true;
 }
 
@@ -427,10 +509,25 @@ bool EiMqtt::subscribeToTopic() {
     return false;
   if (!_state.connected)
     return false;
+  uint16_t packetId;
   for (uint16_t i = 0; i < _subCnt; i++) {
-    _client.subscribe(_subscriptions[i].topic.c_str(), _subscriptions[i].qos);
+    packetId = _client.subscribe(_subscriptions[i].topic.c_str(), _subscriptions[i].qos);
+    logInfo(LS, ET::MQTT, "Subscribing at QoS " + String(_subscriptions[i].qos) + ", packetId: " + String(packetId) + ", to '" + _subscriptions[i].topic + "'");
   }
   return true;
+}
+
+/*---------------   MQTT SUBSCRIPTION ACKNOWLEDGEMENT  ---------------*
+
+void EiMqtt::onMqttSubscribe(uint16_t packetId, uint8_t qos) {
+  static uint16_t lastPacketID = 0;
+  static uint32_t lastMs = 0;
+  if (lastPacketID == packetId && millis() - lastMs < 50) {
+    return;
+  }
+  logInfo(LS, ET::MQTT, "Subscribe acknowledged. packetId: " + String(packetId) + ", qos: " + String(qos));
+  lastPacketID = packetId;
+  lastMs = millis();
 }
 
 /*-----  PUBLIC IS THE MQTT SERVICE CONNECTED  -----*/
@@ -455,16 +552,21 @@ void EiMqtt::dumpConfig() const
 /*-----  PUBLIC: ALLOW EXTERNAL AGENT TO SEND A NEW MQTT CFG IN  -----*/
 
 bool EiMqtt::configureFromJson(const JsonDocument& doc) {
-    MqttConfig cfg = _config;
-    if (doc["mqttServer"].is<String>())
-      cfg.host = doc["mqttServer"].as<String>();
-    if (doc["mqttPort"].is<int>())
-        cfg.port = doc["mqttPort"].as<int>();
-    if (doc["mqttUser"].is<String>())
-        cfg.brokerUser = doc["mqttUser"].as<String>();
-    if (doc["mqttPass"].is<String>())
-        cfg.brokerPwd = doc["mqttPass"].as<String>();
-    return configure(cfg);
+  MqttConfig cfg = _config;
+  if (doc["data"]["host"].is<String>())
+    cfg.host = doc["data"]["host"].as<String>();
+  if (doc["data"]["port"].is<int>())
+    cfg.port = doc["data"]["port"].as<int>();
+  if (doc["data"]["brokerUser"].is<String>())
+    cfg.brokerUser = doc["data"]["brokerUser"].as<String>();
+  if (doc["data"]["brokerPwd"].is<String>())
+    cfg.brokerPwd = doc["data"]["brokerPwd"].as<String>();
+  if (!configure(cfg))
+    return false;
+  logInfo(LS,
+    ET::MQTT,
+    "MQTT configuration updated. Host: " + cfg.host + ", Port: " + String(cfg.port) + ", Broker User: " + cfg.brokerUser);
+  return true;
 }
 
 /*-----  TRANSLATE BETWEEN OWNER STRING AND OWNER ENUM  -----*/
@@ -493,6 +595,31 @@ const char* EiMqtt::ownerToString(Owner owner) {
 /*-----  PROCESS AN INCOMING MSG  -----*/
 
 void EiMqtt::processMsg(const JsonDocument& doc) {
-  
+  String route = doc["route"].as<String>();
+  String command = doc["command"].as<String>();
+  if (route == "mqtt/cfg") {
+    if (command == "SET") {
+      JsonDocument response;
+      response["receiver"] = "web";
+      response["owner"] = "library";
+      response["route"] = "mqtt/cfg";
+      response["command"] = "RESULT";
+      JsonObject data = response["data"].to<JsonObject>();
+      if (configureFromJson(doc)) {
+        data["success"] = true;
+        data["message"] = "MQTT configuration saved.";
+      } else {
+        data["success"] = false;
+        data["message"] = "MQTT configuration was not saved.";
+      }
+      eiSystem.routeOutboundMsg(response);
+      return;
+    }
+    logError(LS,
+      ET::MQTT, "Unknown command '" + command + "' for route '" + route + "'.");
+    return;
+  }
+  logError(LS, ET::MQTT, "Unknown MQTT route '" + route + "'.");
 }
+
 

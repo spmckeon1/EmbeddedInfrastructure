@@ -7,7 +7,7 @@
 
 #include <Arduino.h>
 #include "esp_mac.h" // Required for ESP-IDF MAC functions
-#include <ei_appPolicy.h>
+#include <ei_appFramework.h>
 #include <ei_events.h>
 #include <ei_scheduler.h>
 #include <ei_conversion.h>
@@ -16,11 +16,7 @@
 #include <ei_web.h>
 
 /*-----  CLASS CONSTRUCTOR  -----*/
-// This wires your custom log bridge directly into WiFiManager before boot
-EiNetwork::EiNetwork()
-  : wmLoggerBridge(),
-    wm(wmLoggerBridge)
-{
+EiNetwork::EiNetwork() {
     _configFileName = "/network_cfg.json";
 }
 
@@ -30,63 +26,86 @@ EiNetwork network;
 /*-----  SETUP THE NETWORK SUBSYSTEM  -----*/
 
                             
-                            // Prepare the Network subsystem for startup.
-bool EiNetwork::setup()     // This phase may not depend on services provided by other subsystems.
-{
-  wm.setDebugOutput(true);
-  wm.setSaveConfigCallback(EiNetwork::saveConfigCallback);
+                            
+bool EiNetwork::setup() {
   _configFileName = appDirs.libCfgDir + "/ei_networkCfg.json";
   WiFi.onEvent([this](WiFiEvent_t, WiFiEventInfo_t info) {            // Register WiFi event handlers.
     onWifiGotIP(info);
   }, ARDUINO_EVENT_WIFI_STA_GOT_IP);
+  
   WiFi.onEvent([this](WiFiEvent_t, WiFiEventInfo_t info) {
     onWifiDisconnect(info);
   }, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
+  
   return checkHardware();
-  return true;
+  
 }
 
 /*-------------------------  STARTUP NETWORK SUBSYSTEM  -------------------------*/
 
-bool EiNetwork::startup()
-{
+bool EiNetwork::startup() {
   logInfo(LS, ET::NETWORK, "Initializing Network infrastructure...");
-  storage.ensureFileExists(_configFileName,                           // Ensure the configuration file exists.
-                         createConfigJson(_config), LN);
-  if (!readConfigFromDisk()) {                                          // Load persisted configuration.
+  storage.ensureFileExists(_configFileName, createConfigJson(_config), LN);
+  if (!readConfigFromDisk()) {
     logError(LS, ET::NETWORK, "Unable to load disk config layout.");
     return false;
   }
-  if (!validateConfiguration()) {                                     // Validate configuration for logging purposes.
-    logError(LS, ET::NETWORK,                                                  // An unprovisioned device is not a startup failure.
-             "Network configuration is empty or unprovisioned.");
+  if (!validateConfiguration()) {
+    logInfo(LS, ET::NETWORK, "Network configuration is empty or unprovisioned.");
+    _mode = NetworkMode::PROVISIONING;
+    startProvisioningAP();
+    logInfo(LS, ET::NETWORK, "Network subsystem started in provisioning mode.");
+    return true;
   }
-  wm.setConfigPortalBlocking(false);                                      // 1. Prevent WiFiManager from halting your loop
-  wm.setConnectTimeout(15);                                               // 2. Set how long it tries connecting to the router before opening the portal
-  wm.setConfigPortalTimeout(180);                                         // 3. Set how long the portal stays open before automatically closing (3 minutes)
-  wm.setClass("invert");                                                  // 4. Custom Styling
-  wm.setCustomHeadElement(
-    "<style>body{background-color:#121212; color:#ffffff;}</style>");
-  logInfo(LS, ET::NETWORK, "Starting WiFiManager...");                             // Start the connection process.
-  wm.autoConnect(appIDs.accessPointName);                                 // 5. Fire off the background connection/portal attempt, This returns instantly instead of waiting for a connection
+  _mode = NetworkMode::CONNECTING;
+  _connectStartTime = millis();
+  WiFi.mode(WIFI_STA);
+  logInfo(LS, ET::NETWORK, "Connecting to configured Wi-Fi network: " + _config.ssid);
+  WiFi.begin(_config.ssid.c_str(), _config.password.c_str());
   logInfo(LS, ET::NETWORK, "Network subsystem started.");
   return true;
 }
-
 /*-------------------------  NETWORK EVENT LOOP  -------------------------*/
 
 bool EiNetwork::evtLoop() {
-  static RunTime cfgWriteTimer = {IntervalType::IT_SECOND, 1, -1}; // declare the RunTime struct
-  if(scheduler.isTimeToRun(cfgWriteTimer) && _config.dirty) {      // if it is time to run a _config.dirty check and _config.dirty is dirty then
-    writeConfigToDisk();                                        // write the new _config to dsk.
+
+  static RunTime cfgWriteTimer = {IntervalType::IT_SECOND, 1, -1};
+
+  if (scheduler.isTimeToRun(cfgWriteTimer) && _config.dirty) {
+    writeConfigToDisk();
   }
-  wm.process();
+
+  if (_mode == NetworkMode::CONNECTING &&
+      millis() - _connectStartTime >= WIFI_CONNECT_TIMEOUT_MS) {
+
+    logInfo(
+      LS,
+      ET::NETWORK,
+      "Configured Wi-Fi connection timed out. Starting provisioning access point."
+    );
+
+    _mode = NetworkMode::PROVISIONING;
+    startProvisioningAP();
+  }
+
+  if (_mode == NetworkMode::PROVISIONING &&
+      millis() - _provisioningStartTime >= PROVISIONING_TIMEOUT_MS) {
+
+    logInfo(
+      LS,
+      ET::NETWORK,
+      "Provisioning timeout reached. Rebooting."
+    );
+
+    ESP.restart();
+  }
+
   return false;
 }
-
 /*---------------  EVENT HANDLER: OBTAINED NETWORK IP  ---------------*/
 
 void EiNetwork::onWifiGotIP(WiFiEventInfo_t info) {
+  _mode = NetworkMode::CONNECTED;
   _state.sta.connected = true;
   _state.sta.ipAddress = WiFi.localIP().toString();
   _state.sta.ssid = WiFi.SSID();
@@ -363,7 +382,7 @@ bool EiNetwork::configure(const NetworkConfig& cfg) {
     logError(LS, ET::NETWORK, "Unable to save network configuration.");
     return false;
   }
-  logInfo(LS, ET::NETWORK, "WiFi configuration updated.");
+  logInfo(LS, ET::NETWORK, "WiFi configuration updated.  On reboot the SSID: " + _config.ssid + " will be used.");
   return true;
 }
 
@@ -384,70 +403,42 @@ const NetworkConfig& EiNetwork::config() const {
     return _config;
 }
 
-
-
-void EiNetwork::saveConfigCallback()
-{
-    logInfo(LS, ET::NETWORK, "New Wi-Fi credentials submitted via portal!");
-
-    NetworkConfig cfg = network._config;
-    network.updateConfigFromWiFiManager(cfg);
-
-    if (network.configure(cfg))
-    {
-        logInfo(LS, ET::NETWORK, "Successfully saved new network credentials to disk.");
-    }
-    else
-    {
-        logError(LS, ET::NETWORK, "Failed writing new credentials to disk.");
-    }
-}
-
-/*-----  ***  -----*/
-
-void EiNetwork::updateConfigFromWiFiManager(NetworkConfig& cfg)
-{
-    cfg.ssid     = wm.getWiFiSSID();
-    cfg.password = wm.getWiFiPass();
-    cfg.dirty    = true;
-}
-
 /*-----  PROCESS AN INCOMING MSG  -----*/
 
 void EiNetwork::processMsg(const JsonDocument& doc) {
   String route = doc["route"].as<String>();
   String command = doc["command"].as<String>();
-
-  if (route == "network/wifi/cfg") {
-
-    if (command == "SET") {
-      JsonDocument response;
-      response["owner"] = "library";
-      response["route"] = "network/wifi/cfg";
-      response["command"] = "RESULT";
-      JsonObject data = response["data"].to<JsonObject>();
-      if (configureFromJson(doc)) {
-        data["success"] = true;
-        data["message"] = "WiFi configuration saved.";
-      } else {
-        data["success"] = false;
-        data["message"] = "WiFi configuration was not saved.";
-      }
-      web.webPubMsg(response);
-      return;
-    }
-    if (command == "GET") {
-      JsonDocument response = getWifiConfigMsg();
-      web.webPubMsg(response);
-      return;
-    }
-
-    logError(LS, ET::NETWORK, "Unknown command '" + command + "' for route '" + route + "'.");
+  if (route != "network/wifi/cfg") {
+    logError(LS, ET::NETWORK, "Unknown Network route '" + route + "'.");
     return;
   }
-
-  logError(LS, ET::NETWORK, "Unknown Network route '" + route + "'.");
+  if (command == "SET") {
+    JsonDocument response;
+    response["receiver"] = "web";
+    response["owner"] = "library";
+    response["route"] = "network/wifi/cfg";
+    response["command"] = "RESULT";
+    JsonObject data = response["data"].to<JsonObject>();
+    if (configureFromJson(doc)) {
+      data["success"] = true;
+      data["message"] = "WiFi configuration saved.";
+    } else {
+      data["success"] = false;
+      data["message"] = "WiFi configuration was not saved.";
+    }
+    eiSystem.routeOutboundMsg(response);
+    return;
+  }
+  if (command == "GET") {
+    JsonDocument response = getWifiConfigMsg();
+    response["receiver"] = "web";
+    eiSystem.routeOutboundMsg(response);
+    return;
+  }
+  logError(LS,
+    ET::NETWORK, "Unknown command '" + command + "' for route '" + route + "'.");
 }
+
 
 /*-----  PROCESS AN INCOMING MSG  -----*/
 
@@ -464,5 +455,42 @@ JsonDocument EiNetwork::getWifiConfigMsg() {
     data["password"] = _config.password;
 
     return response;
+}
+
+/*-----  PROCESS AN ACCESS POINT  -----*/
+
+void EiNetwork::startProvisioningAP()
+{
+    logInfo(
+        LS,
+        ET::NETWORK,
+        String("Starting Wi-Fi provisioning access point: ") +
+        appIDs.accessPointName
+    );
+
+    WiFi.mode(WIFI_AP);
+    WiFi.softAP(appIDs.accessPointName);
+
+    _mode = NetworkMode::PROVISIONING;
+    _provisioningStartTime = millis();
+
+    logInfo(
+        LS,
+        ET::NETWORK,
+        "Provisioning AP started. IP address: " +
+        WiFi.softAPIP().toString()
+    );
+
+    web.startup();
+}
+
+/*-----  KILL AN ACCESS POINT  -----*/
+
+void EiNetwork::stopProvisioningAP() {
+    if (WiFi.getMode() == WIFI_AP ||
+        WiFi.getMode() == WIFI_AP_STA) {
+
+        WiFi.softAPdisconnect(true);
+    }
 }
 

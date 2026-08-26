@@ -19,13 +19,6 @@
 
 #include <ei_types.h>
 
-enum class Source {
-  NOT_YET_SET = -1,
-  WEB,
-  NODE_RED,
-  APP_STARTUP
-};
-
 namespace AppInfo {
   void GetAppName(JsonObject app, const String& fileName);
   void getAppInfo(JsonDocument& doc, const char* filePath, const char* compileDate);
@@ -36,6 +29,7 @@ namespace AppInfo {
 
 namespace Json {
   String jsonToString(const JsonDocument& doc);
+  void missingField(const char* eventType, const String& field, const String& json);
 }
 
 namespace Text {

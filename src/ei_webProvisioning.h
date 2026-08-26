@@ -10,6 +10,30 @@ static const char PROGMEM webPgSetup[] = R"rawliteral(
   <title>Device Setup</title>
 
   <style>
+    .password-field {
+      position: relative;
+    }
+
+    .password-field input {
+      width: 100%;
+      padding-right: 3rem;
+      box-sizing: border-box;
+    }
+
+    .password-toggle {
+      position: absolute;
+      right: 0.5rem;
+      top: 50%;
+      transform: translateY(-50%);
+      margin: 0;
+      padding: 0;
+      line-height: 1;
+      border: none;
+      background: none;
+      cursor: pointer;
+      font-size: 1.2rem;
+    }
+
     body {
       font-family: Arial, sans-serif;
       max-width: 700px;
@@ -89,9 +113,18 @@ static const char PROGMEM webPgSetup[] = R"rawliteral(
     <label for="wifiSsid">SSID</label>
     <input type="text" id="wifiSsid" autocomplete="off">
 
-    <label for="wifiPassword">Password</label>
+  <label for="wifiPassword">Password</label>
+
+  <div class="password-field">
     <input type="password" id="wifiPassword" autocomplete="off">
 
+    <button
+      type="button"
+      class="password-toggle"
+      onclick="togglePasswordVisibility()"
+      aria-label="Show password"
+    >👁</button>
+  </div>
     <button type="button" id="saveWifi">Save WiFi</button>
   </section>
 
@@ -150,11 +183,48 @@ document.getElementById("reboot").addEventListener("click", reboot);
 
 document.getElementById("uploadFile").addEventListener("click", uploadFile);
 
+/*-----  SEND THE ENTERED MQTT DATA TO THE SERVER  -----*/
+
+function saveMqtt() {
+  const host = document.getElementById("mqttHost").value;
+  const port = document.getElementById("mqttPort").value;
+  const brokerUser = document.getElementById("mqttUser").value;
+  const brokerPwd = document.getElementById("mqttPassword").value;
+  sendMessage(
+    "library",
+    "mqtt/cfg",
+    "SET",
+    {
+      host: host,
+      port: Number(port),
+      brokerUser: brokerUser,
+      brokerPwd: brokerPwd
+    }
+  );
+}
+
 function updateFileProvisioningState() {
   const destination = document.getElementById("fileDestination").value;
   const file = document.getElementById("fileSelect").files.length > 0;
   document.getElementById("fileSelect").disabled = destination === "";
   document.getElementById("uploadFile").disabled = destination === "" || !file;
+}
+
+/*-----  TOGGLE PASSWORD VISIBILITY   -----*/
+
+function togglePasswordVisibility() {
+  const password = document.getElementById("wifiPassword");
+  const button = document.querySelector(".password-toggle");
+
+  if (password.type === "password") {
+    password.type = "text";
+    button.textContent = "🙈";
+    button.setAttribute("aria-label", "Hide password");
+  } else {
+    password.type = "password";
+    button.textContent = "👁";
+    button.setAttribute("aria-label", "Show password");
+  }
 }
 
 /*-----  HANDLE THE INCOMING SETUP DATA   -----*/
@@ -301,17 +371,20 @@ function testBinaryUpload() {
 /*-----  REQUEST A REBOOT  -----*/
 
 function reboot() {
-    sendMessage(
-        "library",
-        "system/reboot",
-        "SET"
-    );
+  sendMessage(
+    "library",
+    "system/reboot",
+    "SET",
+    {
+      reason: "User requested a reboot to apply configuration changes."
+    }
+  );
 }
 
 /*-----  REQUEST PAGE SETUP INFORMATION  -----*/
   
 function getSetup() {
-    sendMessage("library", "web/setup", "SETUP");
+    sendMessage("library", "appFramework/setup", "SETUP");
 }
 
 /*-----  REQUEST NETWORK CONFIGURATION DATA  -----*/
@@ -370,7 +443,7 @@ function onWebSocketMessage(event) {
   if (msg.owner !== "library") {
     return;
   }
-  if (msg.route === "web/setup" && msg.command === "SETUP") {
+  if (msg.route === "appFramework/setup" && msg.command === "SETUP") {
     processSetup(msg.data);
     return;
   }
@@ -384,34 +457,33 @@ function onWebSocketMessage(event) {
     } else {
       setStatus(msg.data?.message || "WiFi configuration was not saved.");
     }
-
+    return;
+  }
+  if (msg.route === "mqtt/cfg" && msg.command === "RESULT") {
+    if (msg.data && msg.data.success) {
+      setStatus(msg.data.message || "MQTT configuration saved.");
+    } else {
+      setStatus(msg.data?.message || "MQTT configuration was not saved.");
+    }
     return;
   }
   setStatus("Received: " + event.data);
-if (
-    msg.route === "storage/file" &&
-    msg.command === "RESULT"
-) {
-    if (msg.data && msg.data.success) {
-
-        const file =
-            document.getElementById("fileSelect").files[0];
-
-        if (!file) {
-            setStatus("Upload file is no longer selected.");
-            return;
-        }
-
-        uploadFileChunks(file);
-    } else {
-        setStatus(
-            msg.data?.message ||
-            "File upload could not be started."
-        );
+if (msg.route === "storage/file" && msg.command === "RESULT") {
+  if (msg.data && msg.data.success) {
+    const file = document.getElementById("fileSelect").files[0];
+    if (!file) {
+      setStatus("Upload file is no longer selected.");
+      return;
     }
-
-    return;
-}
+    uploadFileChunks(file);
+  } else {
+    setStatus(
+      msg.data?.message ||
+      "File upload could not be started."
+    );
+  }
+  return;
+  }
 }
 
 function onWebSocketOpen() {
