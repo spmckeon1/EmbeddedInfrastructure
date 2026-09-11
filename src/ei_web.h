@@ -14,14 +14,12 @@
 #include <ei_webProvisioning.h>
 
 struct WebClient {
-  AsyncWebSocketClient* client;   // Connection identity
-  uint32_t clientId;
-
-  String pgName;                  // Registration
-  IPAddress ip;                   // Network
-
-  uint32_t connectedAt;           // Statistics
-  uint32_t lastActivity;
+  AsyncWebSocketClient* client = nullptr;   // Connection identity
+  uint32_t clientId = 0;
+  String pgName;
+  IPAddress ip;
+  uint32_t connectedAt = 0;
+  uint32_t lastActivity = 0;
 };
 
 class AsyncWebSocket;
@@ -44,8 +42,14 @@ public:
                         void* arg,
                         uint8_t* data,
                         size_t len);
+  bool processMsg(const JsonDocument& doc);
+  bool isPageConnected(const String& page);
 
 private:
+  
+  WebClient* _clients = nullptr;
+  uint8_t _maxWebClients = 0;
+  
   AsyncWebServer _server{80};
   AsyncWebSocket _ws{"/ws"};
   String _incomingFilePath;
@@ -53,7 +57,6 @@ private:
   bool _downloadingFile = false;
   const Source _source = Source::WEB;
   static constexpr uint8_t MAX_WEB_CLIENTS = 10;
-  WebClient _clients[MAX_WEB_CLIENTS];
 
   bool handleIncomingFile(String s);
   bool validateTxtMsg(uint8_t* data, size_t len, JsonDocument& doc);
@@ -74,8 +77,9 @@ private:
   WebClient* findClient(AsyncWebSocketClient* client);
   void clearClient(WebClient* client);
   WebClient* addClient(AsyncWebSocketClient* client);
-  bool setClientPage(AsyncWebSocketClient* client, const String& pgName);
-
+  void processConnect(const JsonDocument& doc);
+  void registerClient(AsyncWebSocketClient* client);
+  
 };
 
 extern Web web;

@@ -11,6 +11,7 @@
 #include <ei_appFramework.h>
 #include <ei_network.h>
 #include <ei_storage.h>
+#include <ei_system.h>
 #include <ei_utilities.h>
 #include <ei_time.h>
 
@@ -21,6 +22,11 @@ EiTime eiTime;
 bool EiTime::evtLoop() {
   static RunTime ntpSetTimer = {IntervalType::IT_SECOND, 2, -1};
   static bool ntpSyncAnnounced = false;
+  
+  if (_config.dirty) {
+      writeConfigToDisk();
+  }
+
   if (!network.isConnected())
     return false;
   if (timeStatus() != timeSet) {
@@ -34,9 +40,13 @@ bool EiTime::evtLoop() {
     ntpSyncAnnounced = true;
   }
   if (_tz.getPosix() != _config.posixRule) {
-    setTimeZone();
-    saveBootTime();
-    return false;
+      if (setTimeZone()) {
+        if(!_state.active) {
+          _state.active = true;
+          eiEvents.notify(EiEvent::TimeActive);
+        }
+      }
+      return false;
   }
   if (_pending.pending) {
     // applyPendingConfiguration();
@@ -45,6 +55,11 @@ bool EiTime::evtLoop() {
   return false;
 }
 
+/*-----  HAS TIME CONNECED AND NOW CORRECT  -----*/
+
+bool EiTime::isTimeActive() const {
+    return _state.active;
+}
 
 /*-----  CALL FOR NTP SYNC  -----*/
 
@@ -97,10 +112,12 @@ bool EiTime::setup() {
 
 bool EiTime::readConfigFromDisk() {
     JsonDocument doc;
+
     if (!storage.readJsonFile(_configFileName.c_str(), doc, LN))
         return false;
 
     _config.posixRule = doc["posixRule"] | _config.posixRule;
+    _config.olsonName = doc["olsonName"] | _config.olsonName;
 
     return true;
 }
@@ -109,8 +126,17 @@ bool EiTime::readConfigFromDisk() {
 
 Storage::WriteResult EiTime::writeConfigToDisk() {
     JsonDocument doc;
+
     doc["posixRule"] = _config.posixRule;
-    return storage.writeJsonFile(_configFileName.c_str(), doc, LN);
+    doc["olsonName"] = _config.olsonName;
+
+    Storage::WriteResult result = storage.writeJsonFile(_configFileName.c_str(), doc, LN);
+
+    if (result == Storage::WriteResult::Success) {
+        _config.dirty = false;
+    }
+
+    return result;
 }
 
 /*-----  CREATE THE CONFIG JSON OBJECT FROM THE CFG CONTENTS  -----*/
@@ -201,9 +227,7 @@ void EiTime::saveBootTime() {
   storage.writeJsonFile(appFnames.bootTime.c_str(), doc, LN);                             // write it to disk
   logInfo(LS, ET::TIME, "Saved boot time: " + String(bootTime) + " to " + appFnames.bootTime);  // log the actvity
   logInfo(LS, ET::TIME, "The boot process is now complete and took " + String(millis()) + "ms");
-  logInfo(LS, ET::TIME, logging.dividerStr(FN, LN));
-  logInfo(LS, ET::TIME, logging.dividerStr(FN, LN));
-  eiEvents.notify(EiEvent::SystemReady); 
+  eiEvents.notify(EiEvent::SystemReady);
 }
 
 /*-----  READ THE BOOT TIME FILE AND RETURN IT  -----*/
@@ -281,4 +305,50 @@ String EiTime::formatDuration(uint32_t ms, DurFormat format) {
 
 void EiTime::processMsg(const JsonDocument& doc) {
   
+}
+
+/*-----  PUBLIC: GET THE IN USE TIEZINE ABBREV  -----*/
+
+String EiTime::getTzAbbrev() {
+    return _tz.dateTime("T");
+}
+
+/*-----  PUBLIC: GET THE TIME CONFIGURATION DATA  -----*/
+
+const TimeConfig& EiTime::config() const {
+    return _config;
+}
+
+/*-----  PUBLIC: CONFIGURE TIME FROM A JSON DOC  -----*/
+
+bool EiTime::configureFromJson(const JsonDocument& doc) {
+  TimeConfig cfg = _config;
+
+  if (doc["data"]["posixRule"].is<String>())
+    cfg.posixRule = doc["data"]["posixRule"].as<String>();
+
+  if (doc["data"]["olsonName"].is<String>())
+    cfg.olsonName = doc["data"]["olsonName"].as<String>();
+
+  return configure(cfg);
+}
+
+/*-----  COMMIT THE CONFIGURATION  -----*/
+
+bool EiTime::configure(const TimeConfig& cfg) {
+  // validate
+
+  if (cfg.posixRule == _config.posixRule &&
+    cfg.olsonName == _config.olsonName) {
+
+    logInfo(LS, ET::TIME, "Time configuration update received but there were no changes.");
+
+    return true;
+  }
+
+  _config = cfg;
+  _config.dirty = true;
+  logInfo(LS, ET::TIME, "Time configuration changed to " + _config.olsonName + ".");
+
+  return true;
 }

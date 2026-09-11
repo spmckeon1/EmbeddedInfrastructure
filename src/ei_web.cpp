@@ -42,7 +42,6 @@ static void onWsEvent(
 /*-----    WHEN WIFI STARTS   -----*/
 
 static void onWifiConnected() {
-  TRACE();
   web.startup();
 }
 
@@ -53,6 +52,7 @@ bool Web::setup() {
   if (!startWebSocket())
     return false;
   ElegantOTA.begin(&_server);
+//  ElegantOTA.setTitle(appIDs.appName.c_str());
   eiEvents.on(EiEvent::WifiConnected, onWifiConnected);
   return true;
 }
@@ -62,6 +62,14 @@ bool Web::setup() {
 bool Web::startup() {
   logInfo(LS, ET::WEB, "Web startup() is running.");
   if(!startWebServer()) return false;
+  _maxWebClients = appLibraryConfig.maxWebClients;
+  if (_maxWebClients == 0) {
+    logError(LS, ET::WEB, "Maximum Web clients is zero.");
+    return false;
+  }
+  DUMP(appLibraryConfig.maxWebClients);
+  _clients = new WebClient[_maxWebClients];
+  DUMP(_maxWebClients);
   return true;
 }
 
@@ -79,33 +87,62 @@ void Web::evtLoop() {
 /*-----    HANDLE THE WEB EVENT   -----*/
 
 void Web::onWsEvent(AsyncWebSocket* server,
-                      AsyncWebSocketClient* client,
-                      AwsEventType type,
-                      void* arg,
-                      uint8_t* data,
-                      size_t len)
+                    AsyncWebSocketClient* client,
+                    AwsEventType type,
+                    void* arg,
+                    uint8_t* data,
+                    size_t len)
 {
   switch (type) {
-  case WS_EVT_DATA: {
-    AwsFrameInfo* info = (AwsFrameInfo*)arg;
-    if (info->opcode == WS_TEXT) {
+    case WS_EVT_CONNECT: {
+      TRACE();
+      uint32_t clientId = client->id();
+
+      registerClient(client);
+
       JsonDocument doc;
-      if (!validateTxtMsg(data, len, doc))
-          break;
-      eiSystem.processExternalMsg(doc);
+
+      doc["owner"] = "library";
+      doc["route"] = "web";
+      doc["command"] = "CLIENT_ID";
+      doc["data"]["clientId"] = clientId;
+
+      String msg;
+      serializeJson(doc, msg);
+
+      sendWS_msg(msg, client);
+
+      logInfo(LS, ET::WEB,
+              "Web client connected. Client ID: " + String(clientId));
+
+      break;
     }
-    else if (info->opcode == WS_BINARY) {
-      logInfo(LS, ET::WEB, "Received WebSocket binary data: " + String(len) + " bytes.");
-      storage.processBinary(data, len);
+    case WS_EVT_DATA: {
+      AwsFrameInfo* info = (AwsFrameInfo*)arg;
+      if (info->opcode == WS_TEXT) {
+        JsonDocument doc;
+        if (!validateTxtMsg(data, len, doc))
+            break;
+        eiSystem.processExternalMsg(doc);
+      }
+      else if (info->opcode == WS_BINARY) {
+        logInfo(LS, ET::WEB, "Received WebSocket binary data: " + String(len) + " bytes.");
+        storage.processBinary(data, len);
+      }
+      break;
     }
-    break;
-  }
-  case WS_EVT_DISCONNECT:
-    // Optional logging
-    break;
-  default:
-    break;
-  }
+    case WS_EVT_DISCONNECT: {
+      TRACE();
+      WebClient* wc = findClient(client);
+      if (wc != nullptr) {
+        logInfo(LS, ET::WEB, "Web client disconnected. Client ID: " + String(wc->clientId));
+        clearClient(wc);
+      }
+      break;
+    }
+    default:
+      break;
+    }
 }
 
 /*--------------- VALIDATE AN INCOMING MESSAGE ---------------*/
@@ -205,6 +242,19 @@ bool Web::handleFileSizeRequest(String s, AsyncWebSocketClient* client) {
 /*---------------  START THE WEB SERVER  ---------------*/
 
 bool Web::startWebServer() {
+  _server.on("/", [this](AsyncWebServerRequest *request) {
+  const String mainHTMLFile = "/html/main.html";
+  if (storage.exists(mainHTMLFile)) {
+    logInfo(LS, ET::WEB, "Dispatching main HTML file '" + mainHTMLFile + "'");
+    request->send(storage.getFS(), mainHTMLFile, "text/html");
+  }
+  else {
+    logError(LS, ET::WEB, "Main HTML file '" + mainHTMLFile + "' does not exist");
+    request->send(404, "text/plain", "Main HTML file not found");
+  }
+
+  });
+  
   _server.on("/setup", AsyncWebRequestMethod::HTTP_GET,
       [this](AsyncWebServerRequest *request) {
           request->send_P(200, "text/html",webPgSetup);
@@ -340,30 +390,27 @@ WebClient* Web::addClient(AsyncWebSocketClient* client) {
 /*-----  FIND THE FIRST EMPTY _clients STRUCT AND RETURN IT  -----*/
 
 WebClient* Web::findFreeClient() {
-
-    for (uint8_t i = 0; i < MAX_WEB_CLIENTS; i++) {
-        if (_clients[i].client == nullptr)
-            return &_clients[i];
-    }
-
-    return nullptr;
+  for (uint8_t i = 0; i < MAX_WEB_CLIENTS; i++) {
+    if (_clients[i].client == nullptr)
+      return &_clients[i];
+  }
+  return nullptr;
 }
 
 /*-----  FIND THE CLIENT DATA BY USING THE CLIENT ID AND RETURN ITS STRUCT  -----*/
 
 WebClient* Web::findClient(AsyncWebSocketClient* client) {
-
-    for (uint8_t i = 0; i < MAX_WEB_CLIENTS; i++) {
-        if (_clients[i].client == client)
-            return &_clients[i];
-    }
-
-    return nullptr;
+  for (uint8_t i = 0; i < _maxWebClients; i++) {
+    if (_clients[i].client == client)
+      return &_clients[i];
+  }
+  return nullptr;
 }
 
 /*-----  RETURN THE USED CLIENT STRUCT TO ITS ORIGINAL EMPTY STATE  -----*/
 
 void Web::clearClient(WebClient* wc) {
+  TRACE();
   if (wc == nullptr)
     return;
   wc->client        = nullptr;
@@ -374,13 +421,66 @@ void Web::clearClient(WebClient* wc) {
   wc->lastActivity  = 0;
 }
 
-/*-----  PUT THE PAGE NAME INTO THE CLIENT RECORD  -----*/
+/*-----  PROCESS AN INBOUND MSG  -----*/
 
-bool Web::setClientPage(AsyncWebSocketClient* client, const String& pgName) {
-    WebClient* wc = findClient(client);
-    if (wc == nullptr)
-        return false;
-    wc->pgName = pgName;
+bool Web::processMsg(const JsonDocument& doc) {
+  const char* command = doc["command"] | "";
+
+  if (strcmp(command, "CONNECT") == 0) {
+    processConnect(doc);
     return true;
+  }
+
+  return false;
 }
 
+/*-----  REGISTER A NEW WEB CLIENT  -----*/
+
+void Web::registerClient(AsyncWebSocketClient* client) {
+  DUMP(_maxWebClients);
+  for (uint8_t i = 0; i < _maxWebClients; i++) {
+    if (_clients[i].client == nullptr) {
+      DUMP(i);
+      _clients[i].client = client;
+      _clients[i].clientId = client->id();
+      _clients[i].ip = client->remoteIP();
+      _clients[i].connectedAt = millis();
+      _clients[i].lastActivity = millis();
+
+      logInfo(LS, ET::WEB, "Web client connected. Client ID: " + String(_clients[i].clientId));
+
+      return;
+    }
+  }
+
+  logError(LS, ET::WEB, "Web client table full. Client ID " + String(client->id()) + " rejected.");
+
+  client->close();
+}
+
+/*-----  ***  -----*/
+
+void Web::processConnect(const JsonDocument& doc) {
+  uint32_t clientId = doc["data"]["clientId"] | 0;
+  const char* page = doc["data"]["page"] | "";
+  for (uint8_t i = 0; i < _maxWebClients; i++) {
+    if (_clients[i].clientId == clientId) {
+      _clients[i].pgName = page;
+      logInfo(LS, ET::WEB, "Web client " + String(clientId) + " registered page '" + String(page) + "'");
+      return;
+    }
+  }
+  logError(LS, ET::WEB, "CONNECT received for unknown Web client ID " + String(clientId));
+}
+
+/*-----  PUBIC: IS PAGE CONNECTED  -----*/
+
+bool Web::isPageConnected(const String& page) {
+    for (uint8_t i = 0; i < _maxWebClients; i++) {
+        if (_clients[i].client != nullptr &&
+            _clients[i].pgName == page) {
+            return true;
+        }
+    }
+    return false;
+}

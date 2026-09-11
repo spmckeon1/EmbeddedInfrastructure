@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include <ei_appFramework.h>
 #include <ei_ds18b20.h>
+#include <ei_events.h>
 #include <ei_storage.h>
 #include <ei_mqtt.h>
 #include <ei_network.h>
@@ -9,6 +10,7 @@
 #include <ei_scheduler.h>
 #include <ei_storage.h>
 #include <ei_system.h>
+#include <ei_time.h>
 #include <ei_web.h>
 
 EiSystem eiSystem;
@@ -17,7 +19,6 @@ EiSystem eiSystem;
 
 void EiSystem::evtLoop() {
   // Timers owned by EiSystem
-  static RunTime rebootTimer = {IntervalType::IT_SECOND, 5, -1};
   static RunTime heapTimer   = {IntervalType::IT_MINUTE, _config.heapMonitorInterval, -1};
 
   // Cooperative scheduler state
@@ -25,7 +26,7 @@ void EiSystem::evtLoop() {
   static uint8_t nextSubsystem = 0;
 
   // ----- Service EiSystem -----
-  if (_state.rebootPending && scheduler.isTimeToRun(rebootTimer)) {
+  if (_state.rebootPending && millis() - _state.rebootRequestedAt >= 5000) {
     performReboot();
   }
   if (_config.heapMonitorEnabled &&
@@ -86,6 +87,7 @@ bool EiSystem::bootStrap() {
   storage.createDirIfNotExist(appDirs.logDir);
   storage.createDirIfNotExist(appDirs.appData);
   storage.createDirIfNotExist(appDirs.htmlDir);
+  mqtt.addToSubCount(1);
   return true;
 }
 
@@ -98,14 +100,16 @@ bool EiSystem::setup() {
   if(!web.setup()) return false;
   if(!ds18b20.setup()) return false;
 
+  mqtt.addSubscription("EI Global", EI_MQTT_TOPIC_SUBSCRIPTION, QOS2);      // MUST BE LAST ITEM IN SETUP()
   return true;
 }
 
 bool EiSystem::startup() {
   if(!network.startup()) return false;      // Load credentials, initialize WiFi state
+  if(!appFramework.startup()) return false;
   if(!mqtt.startup()) return false;
-//  if(!web.startup()) return false;
   if(!ds18b20.startup()) return false;
+  eiEvents.on(EiEvent::TimeActive, processTimeActive);
   return true;
 }
 
@@ -114,13 +118,8 @@ bool EiSystem::startup() {
 /*-----  PROCESS AN INCOMING LIBRARY MSG  -----*/
 
 void EiSystem::processLibraryMsg(const JsonDocument& doc) {
-  TRACE();
   String route = doc["route"].as<String>();
   int separator = route.indexOf('/');
-  if (separator <= 0) {
-    logError(LS, ET::SYSTEM, "Library message has invalid route '" + route + "'.");
-    return;
-  }
   String service = route.substring(0, separator);
   if (service == "network") {
     network.processMsg(doc);
@@ -146,21 +145,17 @@ void EiSystem::processLibraryMsg(const JsonDocument& doc) {
     eiSystem.processMsg(doc);
       return;
   }
-  logError(
-    LS,
-    ET::SYSTEM,
-    "Received library message for unknown service '" +
-    service + "' from route '" + route + "'."
-  );
+  if (service == "web") {
+      web.processMsg(doc);
+      return;
+  }
+  logError(LS, ET::SYSTEM, "Received library message for unknown service '" + service + "' from route '" + route + "'.");
 }
 
 /*-----  ROUTE AN OUTBOUND LIBRARY MSG  -----*/
 
 void EiSystem::routeOutboundMsg(const JsonDocument& doc) {
-    TRACE();
-
     const char* receiver = doc["receiver"] | "";
-
     if (strcmp(receiver, "web") == 0) {
         web.webPubMsg(doc);
         return;
@@ -180,20 +175,74 @@ void EiSystem::routeOutboundMsg(const JsonDocument& doc) {
     );
 }
 
+/*-----  DO GET GLOBAL CONFIGURATION  -----*/
+
+void EiSystem::doGetGlobalCfg() {
+  const NetworkConfig& netCfg = network.config();
+  const MqttConfig& mqttCfg = mqtt.config();
+  const TimeConfig& timeCfg = eiTime.config();
+  
+  JsonDocument cfgDoc;
+  JsonObject cfg = cfgDoc.to<JsonObject>();
+
+  JsonObject networkCfg   = cfg["network"].to<JsonObject>();
+  networkCfg["ssid"]      = netCfg.ssid;
+  networkCfg["password"]  = netCfg.password;
+
+  JsonObject mqttCfgObj   = cfg["mqtt"].to<JsonObject>();
+  mqttCfgObj["host"]      = mqttCfg.host;
+  mqttCfgObj["port"]      = mqttCfg.port;
+  mqttCfgObj["brokerUser"]  = mqttCfg.brokerUser;
+  mqttCfgObj["brokerPwd"]  = mqttCfg.brokerPwd;
+
+  JsonObject timeCfgObj   = cfg["time"].to<JsonObject>();
+  timeCfgObj["posixRule"]  = timeCfg.posixRule;
+  timeCfgObj["olsonName"] = timeCfg.olsonName;
+  
+  String payload = appFramework.buildJsonAppMqttMsg("configuration/global/cfg", "PUT", cfg);
+  logInfo(LS, ET::SYSTEM, "Global configuration update requested and sent.");
+  mqtt.mqttPubMsg(EI_MQTT_OUTBOUND_GLOBAL, QOS2, FORGET, payload, LN);
+}
+
+/*-----  HANDLE THE REQUEST FOR A REBOOT  -----*/
+
+void EiSystem::hdlRebootReq(const JsonDocument& doc) {
+  String route = doc["route"].as<String>();
+  String command = doc["command"].as<String>();
+  if (command == "SET") {
+    String reason = doc["data"]["reason"].as<String>();
+    requestReboot(reason);
+    return;
+  }
+  logError(LS,
+    ET::SYSTEM, "Unknown system command '" + command + "' from route '" + route + "'.");
+  return;
+}
+
+/*-----  HANDLE THE REQUEST FOR A GLOBAL REQUEST  -----*/
+
+void EiSystem::hdlGlobalReq(const JsonDocument& doc) {
+  String route = doc["route"].as<String>();
+  String command = doc["command"].as<String>();
+  if(command == "getConfig") {
+    doGetGlobalCfg();
+    return;
+  }
+  logError(LS,
+    ET::SYSTEM, "Unknown system command '" + command + "' from route '" + route + "'.");
+  return;
+}
+
 /*-----  PROCESS AN INCOMING SYSTEM MSG  -----*/
 
 void EiSystem::processMsg(const JsonDocument& doc) {
-  TRACE();
   String route = doc["route"].as<String>();
-  String command = doc["command"].as<String>();
   if (route == "system/reboot") {
-    if (command == "SET") {
-      String reason = doc["data"]["reason"].as<String>();
-      requestReboot(reason);
-      return;
-    }
-    logError(LS,
-      ET::SYSTEM, "Unknown system command '" + command + "' from route '" + route + "'.");
+    hdlRebootReq(doc);
+    return;
+  }
+  if(route == "system/global") {
+    hdlGlobalReq(doc);
     return;
   }
   logError(LS, ET::SYSTEM, "Unknown system route '" + route + "'.");
@@ -305,15 +354,11 @@ void EiSystem::setHeapMonitorInterval(uint16_t minutes)
 /*-----  PUBLIC: SET HEAP MONITORING ENABLED   -----*/
 
 void EiSystem::processExternalMsg(const JsonDocument& doc) {
-  TRACE();
   String msg;
   serializeJson(doc, msg);
 
-  logInfo(
-      LS,
-      ET::SYSTEM,
-      "External message received: " + msg
-  );
+//  logInfo(LS, ET::SYSTEM, "External message received: " + msg);
+  
   String owner = doc["owner"].as<String>();
   if (owner == "library") {
     processLibraryMsg(doc);
@@ -328,4 +373,12 @@ void EiSystem::processExternalMsg(const JsonDocument& doc) {
     }
     return;
   }  logError(LS, ET::MQTT, "Received external message with unknown owner '" + owner + "'.");
+}
+
+/*-----  GLOBAL: WHEN TIME BECINES ACTIVE   -----*/
+
+void processTimeActive() {
+    if (eiTime.isTimeActive()) {
+      eiTime.saveBootTime();
+    }
 }

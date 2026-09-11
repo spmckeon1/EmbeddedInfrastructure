@@ -3,6 +3,11 @@
 #include <ei_types.h>
 #include <ei_utilities.h>
 
+// EI MQTT message topics
+#define EI_MQTT_TOPIC_SUBSCRIPTION   "nr/to/ei/#"
+#define EI_MQTT_INBOUND_GLOBAL    "nr/to/ei"
+#define EI_MQTT_OUTBOUND_GLOBAL "ei/to/nr"
+
 struct SystemState {
   bool rebootPending = false;
   uint32_t rebootRequestedAt = 0;
@@ -29,7 +34,7 @@ public:
   void enableHeapMonitor(bool enabled);
   void setHeapMonitorInterval(uint16_t minutes);
   void processExternalMsg(const JsonDocument& doc);             // msgs comming in libraries that receive outside commuications
-  void processMsg(const JsonDocument& doc);
+//  void processMsg(const JsonDocument& doc);
 
 private:
 private:
@@ -49,6 +54,10 @@ private:
   SystemConfig _config;
   String _rebootReasonFname;
   
+  void doGetGlobalCfg();
+  void hdlRebootReq(const JsonDocument& doc);
+  void hdlGlobalReq(const JsonDocument& doc);
+  void processMsg(const JsonDocument& doc);
   static Service serviceFromString(const char* s);
   static const char* serviceToString(Service service);
   void checkHeap();
@@ -58,4 +67,5 @@ private:
 extern EiSystem eiSystem;
 
 extern bool appHandleMsg(const JsonDocument& doc);
+extern void processTimeActive();
 

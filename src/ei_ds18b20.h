@@ -61,17 +61,16 @@ struct Sensor {
 };
 
 struct Config {
-    uint8_t oneWirePin;
-    uint8_t expectedSensorCount = 0;
-//    uint8_t resolution = 12;     // MOVED TO struct Sensor 08-13-2026
-    uint32_t readInterval = 5;
-//    float hysteresis = 0.3;       // MOVED TO struct Sensor 08-13-2026
+  uint8_t oneWirePin;
+  uint8_t expectedSensorCount = 0;
+  uint32_t readInterval = 5;
 };
 
 struct State {
-    bool initialized = false;
-    bool readingEnabled = true;
-    uint8_t sensorCount = 0;
+  bool initialized = false;
+  bool inUse = true;
+  bool readingEnabled = true;
+  uint8_t sensorCount = 0;
 };
 
 struct Stats {

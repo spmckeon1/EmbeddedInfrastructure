@@ -33,8 +33,13 @@ enum class DurFormat {
 };
 
 struct TimeConfig {       // Default to U.S. Mountain Time. Applications may override as needed.
-  bool dirty = true;
-  String posixRule = "MST7MDT,M3.2.0,M11.1.0";
+ bool dirty = true;
+ String posixRule = "MST7MDT,M3.2.0,M11.1.0";
+ String olsonName = "America/Denver";
+};
+
+struct TimeState {
+    bool active = false;
 };
 
 struct PendingTimeConfig {
@@ -58,20 +63,25 @@ public:
 
   uint16_t millisecond();
 
+  bool isTimeActive() const;
   bool isReady() const;
   bool posixRuleChanged() const;
-  String getPosixRule() const;
   String getLogTimeStamp();
   time_t now();
   bool setPosixRule(const String& rule);
   String formatDuration(uint32_t ms, DurFormat format);
   time_t getBootTime() const;
   void processMsg(const JsonDocument& doc);
+  String getTzAbbrev();
+  const TimeConfig& config() const;
+  bool configureFromJson(const JsonDocument& doc);
+  void saveBootTime();
 
 private:
   String _configFileName;
 //  static constexpr const char* _configFileName = "/ei_timeCfg.json";
   TimeConfig _config;
+  TimeState _state;
   PendingTimeConfig _pending;
   Timezone _tz;                           // the ezTime time zone struct
   
@@ -82,8 +92,8 @@ private:
   JsonDocument createConfigJson(const TimeConfig& cfg) const;
   void loadConfigFromJson(const JsonDocument& doc, TimeConfig& cfg) const;
   bool validateConfiguration(const TimeConfig& cfg);
-  void saveBootTime();
   String formatLogTime();
+  bool configure(const TimeConfig& cfg);
   
   static constexpr const char* LOG_TIME_FORMAT =
       "Y-m-d~ H:i:s.v-T";

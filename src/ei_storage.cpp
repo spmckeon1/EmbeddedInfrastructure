@@ -342,6 +342,7 @@ Storage::WriteResult Storage::writeFile(const char * path, const char * message,
   refreshStats();
   return WriteResult::Success;
 }
+
 /*---------------  CREATE FILE  ---------------*/
 
 bool Storage::createFile(const char * path, const char * message) {

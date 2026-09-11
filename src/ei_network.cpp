@@ -68,11 +68,8 @@ bool EiNetwork::startup() {
 /*-------------------------  NETWORK EVENT LOOP  -------------------------*/
 
 bool EiNetwork::evtLoop() {
-
-  static RunTime cfgWriteTimer = {IntervalType::IT_SECOND, 1, -1};
-
-  if (scheduler.isTimeToRun(cfgWriteTimer) && _config.dirty) {
-    writeConfigToDisk();
+  if (_config.dirty) {
+      writeConfigToDisk();
   }
 
   if (_mode == NetworkMode::CONNECTING &&
@@ -283,6 +280,7 @@ Storage::WriteResult EiNetwork::writeConfigToDisk()
 
     return result;
 }
+
 /*-----  CREATE THE CONFIG JSON OBJECT FROM THE cfg CONTENTS  -----*/
 
 JsonDocument EiNetwork::createConfigJson(const NetworkConfig& cfg) const {
@@ -371,21 +369,25 @@ String EiNetwork::getIPAddress() const {
 /*-----  PUBLIC: ALLOW EXTERNAL AGENT TO SEND A NEW NETWORK WIFI CFG IN  -----*/
 
 bool EiNetwork::configure(const NetworkConfig& cfg) {
-  if (cfg.ssid.isEmpty()) {                             // Validate the configuration before accepting it.
-    logError(LS, ET::NETWORK, "WiFi SSID may not be empty.");
-    return false;
-  }
-  _config = cfg;
-  _config.dirty = true;
-  Storage::WriteResult result = writeConfigToDisk();
-  if (result != Storage::WriteResult::Success) {
-    logError(LS, ET::NETWORK, "Unable to save network configuration.");
-    return false;
-  }
-  logInfo(LS, ET::NETWORK, "WiFi configuration updated.  On reboot the SSID: " + _config.ssid + " will be used.");
-  return true;
-}
+    if (cfg.ssid.isEmpty()) {
+        logError(LS, ET::NETWORK, "WiFi SSID may not be empty.");
+        return false;
+    }
+    // Determine whether anything actually changed.
+    bool changed = cfg.ssid != _config.ssid || cfg.password != _config.password;
 
+    if (!changed) {
+        logInfo(LS, ET::NETWORK, "WiFi configuration update received but there were no changes.");
+        return true;
+    }
+
+    _config = cfg;
+    _config.dirty = true;
+
+    logInfo(LS, ET::NETWORK, "WiFi configuration updated. On reboot the SSID: " + _config.ssid + " will be used.");
+
+    return true;
+}
 /*-----  PUBLIC: ALLOW EXTERNAL AGENT TO SEND A NEW NETWORK WIFI JSON DOC IN  -----*/
 
 bool EiNetwork::configureFromJson(const JsonDocument& doc) {
@@ -394,6 +396,7 @@ bool EiNetwork::configureFromJson(const JsonDocument& doc) {
     cfg.ssid = doc["data"]["ssid"].as<String>();
   if (doc["data"]["password"].is<String>())
     cfg.password = doc["data"]["password"].as<String>();
+  logInfo(LS, ET::NETWORK, "WiFi configuration received for SSID: " + cfg.ssid);
   return configure(cfg);
 }
 

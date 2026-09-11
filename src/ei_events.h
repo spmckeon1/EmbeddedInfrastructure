@@ -17,6 +17,7 @@ enum class EiEvent : uint16_t {
 
   // Time
   TimePosixUpdated,
+  TimeActive,
 
   // WiFi
   WifiConnected,
@@ -25,6 +26,10 @@ enum class EiEvent : uint16_t {
   // MQTT
   MqttConnected,
   MqttDisconnected,
+
+  // DS18B20
+
+  Ds18b20SetupComplete,
 
   Count
 };

@@ -59,21 +59,6 @@ struct MqttSubscription {
     String  topic;
     uint8_t qos = 0;
 };
-/*
-class Topic {
-public:
-  constexpr explicit Topic(const char* value)
-      : _value(value) {}
-  constexpr const char* c_str() const {
-    return _value;
-  }
-  constexpr bool isEmpty() const {
-    return (_value == nullptr) || (_value[0] == '\0');
-  }
-private:
-  const char* _value;
-};
-*/
 
 class EiMqtt {
 public:
@@ -83,7 +68,7 @@ public:
   bool setup();
   bool mqttPubMsg(const String& topic, QoS qos, Retain retain, const char* message, int from);
   bool mqttPubMsg(const String& topic, QoS qos, Retain retain, const String& message, int from);
-  bool setMaxSubCnt(uint16_t maxCnt);
+  bool addToSubCount(uint16_t maxCnt);
   bool addSubscription(const String& name, const String& topic, uint8_t qos);
   bool connected() const;
   bool configure(const MqttConfig& cfg);
@@ -123,7 +108,7 @@ private:
   void registerWithNodeRed();
   bool jsonToConfig(const JsonDocument& doc);
   bool readCfgFromDisk();
-  bool writeCfgToDisk();
+  bool writeConfigToDisk();
   void onMqttConnect(bool sessionPresent);
   void onMqttDisconnect(AsyncMqttClientDisconnectReason reason);
   void onMqttSubscribe(uint16_t packetId, uint8_t qos);

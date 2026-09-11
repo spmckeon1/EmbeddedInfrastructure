@@ -15,64 +15,66 @@ EiDs18b20 ds18b20;
 /*----  SETUP THE DS18B20 LIBRARY  ----*/
 
 bool EiDs18b20::setup() {
+  if (_config.expectedSensorCount == 0) {                   // No DS18B20 sensors configured for this application.
+    _state.inUse = false;
+    return true;
+  }
   _oneWire = new OneWire(_config.oneWirePin);
-  if (_oneWire == nullptr) return false;
+  if (_oneWire == nullptr)
+    return false;
   _sensors = new DallasTemperature(_oneWire);
   if (_sensors == nullptr) {
+
     delete _oneWire;
     _oneWire = nullptr;
+
     return false;
   }
+
   _sensorsInUse = new Sensor[_config.expectedSensorCount];
-  Sensor& sensor = _sensorsInUse[0];
 
-  Serial.println("New Sensor slot:");
-  Serial.print("  active: ");
-  Serial.println(sensor.active);
-
-  Serial.print("  valid: ");
-  Serial.println(sensor.valid);
-
-  Serial.print("  index: ");
-  Serial.println(sensor.index);
-
-  Serial.print("  rawTempC: ");
-  Serial.println(sensor.rawTempC);
-
-  Serial.print("  lastTempC: ");
-  Serial.println(sensor.lastTempC);
   if (_sensorsInUse == nullptr) {
+
     delete _sensors;
     _sensors = nullptr;
+
     delete _oneWire;
     _oneWire = nullptr;
+
     return false;
   }
-  _readSensor = {IntervalType::IT_SECOND, _config.readInterval, -1};  // init the eventloop read sensore timer
+
+  _readSensor = {
+    IntervalType::IT_SECOND,
+    _config.readInterval,
+    -1
+  };
+
+  eiEvents.notify(EiEvent::Ds18b20SetupComplete);
+
   return true;
 }
 
 /*----  START UP THE DS18B20 LIBRARY  ----*/
 
-bool EiDs18b20::startup()
-{
-  if (_sensors == nullptr)
-        return false;
-
-    _sensors->begin();
-
-    if (!discoverSensors())
-        return false;
-
-    _state.initialized = true;
-  
+bool EiDs18b20::startup() {
+  if (!_state.inUse)
     return true;
+  if (_sensors == nullptr)
+    return false;
+  _sensors->begin();
+  if (!discoverSensors())
+    return false;
+  _state.initialized = true;
+
+  return true;
 }
 
 /*----  THE DS18B20 EVENT LOOP  ----*/
 
-void EiDs18b20::evtLoop()
-{
+void EiDs18b20::evtLoop(){
+  if (!_state.inUse)
+    return;
   if (!_state.initialized) {
     return;
   }
@@ -241,8 +243,7 @@ char buff[42];
 
 /*----  READ A DS18B20 SENSOR  ----*/
 
-bool EiDs18b20::readSensors()
-{
+bool EiDs18b20::readSensors() {
     if (!_state.initialized)
         return false;
 
@@ -313,9 +314,10 @@ bool EiDs18b20::readSensors()
                     sensor.rptHysTempC != previous;
             }
         }
-
-        if (rptTempChanged && sensor.appSensor != nullptr)
-            sensor.appSensor->rptTempUpdated = true;
+    
+      if (rptTempChanged && sensor.appSensor != nullptr) {
+        sensor.appSensor->rptTempUpdated = true;
+      }
     }
 
     _stats.readCount++;

@@ -20,6 +20,10 @@ const String EiMqtt::HEARTBEAT_TOPIC{"ei/to/nr/hb"};
 /*-----  MQTT EVENT LOOP  -----*/
 
 bool EiMqtt::evtLoop() {
+  if (_config.dirty) {
+      writeConfigToDisk();
+  }
+
   if (!_state.operational)                                      // if mqtt is not operational do nothing
       return false;
   
@@ -223,20 +227,18 @@ void EiMqtt::sendHeartbeat() {
 
 void EiMqtt::registerWithNodeRed() {
   const String topic = String("register/to/nr/") + appIDs.sourceId;
+  DUMP(appIDs.deviceId);
   JsonDocument doc;
-  doc["appName"]           = appIDs.appName;
-  doc["sourceId"]          = appIDs.sourceId;
-  doc["heartbeatInterval"] = mqttHbPolicy.interval;
+  doc["appName"]            = appIDs.appName;
+  doc["sourceId"]           = appIDs.sourceId;
+  doc["pageId"]             = appIDs.pageId;
+  doc["deviceId"]           = appIDs.deviceId;
+  doc["heartbeatInterval"]  = mqttHbPolicy.interval;
   doc["timeout"]            = mqttHbPolicy.timeout;
+  doc["ipAddress"]          = network.getIPAddress();
   String json;
   serializeJson(doc, json);
-  mqttPubMsg(
-             topic,
-             QOS2,
-             FORGET,
-             json,
-             LN
-  );
+  mqttPubMsg(topic, QOS2, FORGET, json, LN);
   logInfo(LS, ET::MQTT, "Registered application with Node-RED.");
 }
 
@@ -275,7 +277,7 @@ bool EiMqtt::readCfgFromDisk() {
 
 /*-----  WRITE THE MQTT CONFIG DATA TO DISK  -----*/
 
-bool EiMqtt::writeCfgToDisk() {
+bool EiMqtt::writeConfigToDisk() {
   JsonDocument doc;
 
   doc["host"]     = _config.host;
@@ -310,7 +312,7 @@ void EiMqtt::onMqttConnect(bool sessionPresent) {
   _state.connected = true;
   eiEvents.notify(EiEvent::MqttConnected);
   logging.setDestination(LogDestination::MqttServer);
-  logInfo(LS, ET::MQTT, "Received MQTT connection notice. Session " + String(sessionPresent ? "is" : "is not") + " present.");
+  logInfo(LS, ET::MQTT, "Received MQTT connection notice. Persistent session " + String(sessionPresent ? "is" : "is not") + " present.");
   subscribeToTopic();
   registerWithNodeRed();
   mqttPubMsg(appMqttLwtPolicy.topic, QOS1, FORGET, appMqttLwtPolicy.onlineMsg, LN);
@@ -383,10 +385,10 @@ void EiMqtt::onMqttMessage(char* topic,
                            size_t index,
                            size_t total)
 {
-  DUMP(topic);
-  Serial.print("MQTT PAYLOAD: ");
-  Serial.write((uint8_t*)payload, len);
-  Serial.println();
+//  DUMP(topic);
+//  Serial.print("MQTT PAYLOAD: ");
+//  Serial.write((uint8_t*)payload, len);
+//  Serial.println();
   String json(payload, len);
   JsonDocument doc;
   DeserializationError err = deserializeJson(doc, json);
@@ -411,7 +413,7 @@ void EiMqtt::onMqttPublish(uint16_t packetId) {
 /*-----  ALLOW THE EXTERNAL CONFIGURATION OF THE MqttConfig STRUCT DATA  -----*/
 
 bool EiMqtt::configure(const MqttConfig& cfg) {
-  if (cfg.host.isEmpty()) {                                // Validate the configuration before accepting it.
+  if (cfg.host.isEmpty()) {
     logError(LS, ET::MQTT, "MQTT host may not be empty.");
     return false;
   }
@@ -419,12 +421,19 @@ bool EiMqtt::configure(const MqttConfig& cfg) {
     logError(LS, ET::MQTT, "Invalid MQTT port.");
     return false;
   }
+  if (cfg.host == _config.host &&
+    cfg.port == _config.port &&
+    cfg.brokerUser == _config.brokerUser &&
+    cfg.brokerPwd == _config.brokerPwd)
+  {
+    logInfo(LS, ET::MQTT, "MQTT configuration update received but there were no changes.");
+    return true;
+  }
   _config = cfg;
   _config.dirty = true;
-  if(!writeCfgToDisk()) {
-    logError(LS, ET::MQTT, "Unable to save MQTT configuration.");
-    return false;
-  }
+  
+  logInfo(LS, ET::MQTT, "MQTT configuration updated. Host: " + cfg.host + ", Port: " + String(cfg.port) + ", Broker User: " + cfg.brokerUser);
+
   return true;
 }
 
@@ -461,37 +470,33 @@ String EiMqtt::disconnectReasonToString(AsyncMqttClientDisconnectReason reason) 
 
 /*-----  SET THE MAXIMUM NUMBER OF MQTT SUBSCRIPTIONS  -----*/
 
-bool EiMqtt::setMaxSubCnt(uint16_t maxCnt) {
-  if (_subscriptions != nullptr) {
-    logError(LS, ET::MQTT, "Subscription table already allocated.");
+bool EiMqtt::addToSubCount(uint16_t count) {
+  if (count == 0) {
+    logError(LS, ET::MQTT, "Subscription count must be greater than zero.");
     return false;
   }
-  if (maxCnt == 0) {
-    logError(LS, ET::MQTT, "Maximum subscription count must be greater than zero.");
-    return false;
-  }
-  _subscriptions = new (std::nothrow) MqttSubscription[maxCnt];
-  if (_subscriptions == nullptr) {
-    logError(LS, ET::MQTT, "Unable to allocate MQTT subscription table. "
-             "MQTT subsystem disabled.");
-    _state.operational = false;
-    return false;
-  }
-  _maxSubCnt = maxCnt;
-  _subCnt    = 0;
+  _maxSubCnt += count;
   return true;
 }
 
-/*-----  ADD REQUESTED SUBSCRIPTIONS  -----*/
+/*-----  ADD REQUESTED SUBSCRIPTION  -----*/
 
 bool EiMqtt::addSubscription(const String& name, const String& topic, uint8_t qos) {
   
   if (_subscriptions == nullptr) {
-    logError(LS, ET::MQTT, "Call setMaxSubCnt() before addSubscription().");
-    return false;
-  }
-  if (_subCnt >= _maxSubCnt) {
-    logError(LS, ET::MQTT, "Maximum subscription count exceeded.");
+    if (_maxSubCnt == 0) {
+      logError(LS, ET::MQTT, "Call addToSubCount() before addSubscription().");
+      return false;
+    }
+    _subscriptions = new (std::nothrow) MqttSubscription[_maxSubCnt];
+    if (_subscriptions == nullptr) {
+      logError(LS, ET::MQTT, "Unable to allocate MQTT subscription table.");
+      _state.operational = false;
+      return false;
+    }
+  }  if (_subCnt >= _maxSubCnt) {
+    logError(LS, ET::MQTT, "Maximum subscription count exceeded: " + String(_subCnt) +
+             "/" + String(_maxSubCnt) + ". Rejecting '" + name + "': " + topic);
     return false;
   }
   _subscriptions[_subCnt].name  = name;
@@ -561,11 +566,10 @@ bool EiMqtt::configureFromJson(const JsonDocument& doc) {
     cfg.brokerUser = doc["data"]["brokerUser"].as<String>();
   if (doc["data"]["brokerPwd"].is<String>())
     cfg.brokerPwd = doc["data"]["brokerPwd"].as<String>();
-  if (!configure(cfg))
+  logInfo(LS, ET::MQTT, "MQTT configuration received for host: " + cfg.host);
+  if (!configure(cfg)) {
     return false;
-  logInfo(LS,
-    ET::MQTT,
-    "MQTT configuration updated. Host: " + cfg.host + ", Port: " + String(cfg.port) + ", Broker User: " + cfg.brokerUser);
+  }
   return true;
 }
 
