@@ -24,34 +24,23 @@ bool EiDs18b20::setup() {
     return false;
   _sensors = new DallasTemperature(_oneWire);
   if (_sensors == nullptr) {
-
     delete _oneWire;
     _oneWire = nullptr;
-
     return false;
   }
-
   _sensorsInUse = new Sensor[_config.expectedSensorCount];
-
   if (_sensorsInUse == nullptr) {
-
     delete _sensors;
     _sensors = nullptr;
-
     delete _oneWire;
     _oneWire = nullptr;
-
     return false;
   }
-
-  _readSensor = {
-    IntervalType::IT_SECOND,
-    _config.readInterval,
-    -1
-  };
-
+  for (uint8_t i = 0; i < _config.expectedSensorCount; i++) {
+      _sensorsInUse[i].index = i;
+  }
+  _readSensor = {IntervalType::IT_SECOND, _config.readInterval, -1};
   eiEvents.notify(EiEvent::Ds18b20SetupComplete);
-
   return true;
 }
 
@@ -190,43 +179,25 @@ bool EiDs18b20::matchDeviceAddr(const DeviceAddress& address0, const DeviceAddre
 
 /*----  PUBLIC: LET THE APP ADD A SENSOR  ----*/
 
-bool EiDs18b20::addSensor(EiDs18b20Sensor& sensor)
-{
-    logInfo(
-        LS,
-        ET::SENSOR,
-        "Adding sensor '" + sensor.name +
-        "', address = " + addrToStr(sensor.address)
-    );
-
-    if (_sensorCount >= _config.expectedSensorCount) {
-        sensor.result = SensorAddResult::SensorLimitReached;
-        return false;
-    }
-
-    Sensor& eiSensor = _sensorsInUse[_sensorCount];
-
-    eiSensor.appSensor = &sensor;
-    eiSensor.name = sensor.name;
-    eiSensor.appId = sensor.appId;
-    eiSensor.temperatureUnit = sensor.temperatureUnit;
-
-    for (uint8_t i = 0; i < 8; i++)
-        eiSensor.address[i] = sensor.address[i];
-
-    if (sensor.temperatureUnit == TemperatureUnit::Fahrenheit)
-        eiSensor.hysteresis = sensor.hysteresis / 1.8f;
-    else
-        eiSensor.hysteresis = sensor.hysteresis;
-
-    eiSensor.resolution = sensor.resolution;
-
-    sensor.ds18b20Index = _sensorCount;
-    sensor.result = SensorAddResult::Success;
-
-    _sensorCount++;
-
-    return true;
+bool EiDs18b20::addSensor(EiDs18b20Sensor& sensor) {
+  logInfo(LS, ET::SENSOR, "Adding sensor '" + sensor.name + "', address = " + addrToStr(sensor.address));
+  if (_sensorCount >= _config.expectedSensorCount) {
+    logError(LS, ET::SENSOR, "FAILED TO ADD SENSOR " + sensor.name + ".");
+    return false;
+  }
+  Sensor& eiSensor = _sensorsInUse[_sensorCount];
+  eiSensor.name = sensor.name;
+  eiSensor.appId = sensor.appId;
+  eiSensor.temperatureUnit = sensor.temperatureUnit;
+  for (uint8_t i = 0; i < 8; i++)
+    eiSensor.address[i] = sensor.address[i];
+  if (sensor.temperatureUnit == TemperatureUnit::Fahrenheit)
+    eiSensor.hysteresis = sensor.hysteresis / 1.8f;
+  else
+    eiSensor.hysteresis = sensor.hysteresis;
+  eiSensor.resolution = sensor.resolution;
+  _sensorCount++;
+  return true;
 }
 
 /*----  CONVERT A SENSOR ADDRESS TO A STRING  ----*/
@@ -315,8 +286,8 @@ bool EiDs18b20::readSensors() {
             }
         }
     
-      if (rptTempChanged && sensor.appSensor != nullptr) {
-        sensor.appSensor->rptTempUpdated = true;
+      if (rptTempChanged) {
+          eiEvents.notify(EiEvent::Ds18b20TempChg);
       }
     }
 
@@ -332,12 +303,13 @@ void EiDs18b20::setReadInterval(uint32_t interval) {
   _readSensor.intvToRun = interval;
 }
 
-/*----  SET THE HYSTERESIS TEMP SPREAD  ----*/
+/*----  SET THE HYSTERESIS TEMP SPREAD  ----*
 
 void EiDs18b20::setHysteresis(EiDs18b20Sensor& sensor) {
   Sensor& eiSensor = _sensorsInUse[sensor.ds18b20Index];
   eiSensor.hysteresis = sensor.hysteresis;
 }
+
 /*----  GET A SENSORS RAW ºC TEMPERATURE  ----*/
 
 float EiDs18b20::getRawTemp(uint8_t sensorId)
@@ -408,3 +380,14 @@ float EiDs18b20::getHysteresisTempF(uint8_t index)
 {
     return _sensorsInUse[index].rptHysTempF;
 }
+
+/*----  GET THE SENSOR ID BY ITS APPID  ----*/
+
+uint8_t EiDs18b20::getSensorId(uint8_t appId) {
+  for (uint8_t i = 0; i < _sensorCount; i++) {
+    if (_sensorsInUse[i].appId == appId)
+      return _sensorsInUse[i].index;
+  }
+  return INVALID_SENSOR_INDEX;
+}
+

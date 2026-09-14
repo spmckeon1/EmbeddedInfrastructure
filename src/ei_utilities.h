@@ -17,6 +17,9 @@
 //
 // -----------------------------------------------------------------------------
 
+#include <Arduino.h>
+#include <ArduinoJson.h>
+
 #include <ei_types.h>
 
 namespace AppInfo {

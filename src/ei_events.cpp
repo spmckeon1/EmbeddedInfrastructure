@@ -93,6 +93,8 @@ const char* EiEvents::eventToString(EiEvent event) {
       return "None";
     case EiEvent::Ds18b20SetupComplete:
       return "Ds18b20SetupComplete";
+    case EiEvent::Ds18b20TempChg:
+        return "Ds18b20TempChg";
     default:
       return "Unknown";
   }

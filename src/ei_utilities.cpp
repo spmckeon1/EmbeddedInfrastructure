@@ -4,8 +4,6 @@
  
  */
 
-#include <Arduino.h>
-#include <ArduinoJson.h>
 
 #include <ei_utilities.h>
 

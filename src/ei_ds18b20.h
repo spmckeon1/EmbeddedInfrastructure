@@ -18,6 +18,12 @@ static constexpr uint8_t INVALID_APP_ID = 0xFF;
 static constexpr uint8_t INVALID_SENSOR_INDEX = 0xFF;
 static constexpr int STARTUP_TEMP = INT_MIN;
 
+constexpr uint8_t RES_NINE   = 9;
+constexpr uint8_t RES_TEN    = 10;
+constexpr uint8_t RES_ELEVEN = 11;
+constexpr uint8_t RES_TWELVE = 12;
+
+
 enum class SensorAddResult : uint8_t {
     NotProcessed,
     Success,
@@ -37,9 +43,6 @@ struct EiDs18b20Sensor {
   DeviceAddress address;
   float hysteresis = 0.3;
   uint8_t resolution = 12;
-  uint8_t ds18b20Index = INVALID_SENSOR_INDEX;
-  bool rptTempUpdated = false;
-  SensorAddResult result = SensorAddResult::NotProcessed;
 };
 
 struct Sensor {
@@ -57,7 +60,6 @@ struct Sensor {
   int   rptHysTempF = STARTUP_TEMP;
   TemperatureUnit temperatureUnit = TemperatureUnit::Celsius;
   uint32_t lastReadingTime = 0;
-  EiDs18b20Sensor* appSensor = nullptr;
 };
 
 struct Config {
@@ -86,11 +88,12 @@ public:
   void sendStartupData(uint8_t oneWirePin, uint8_t expectedSensorCount);
   bool addSensor(EiDs18b20Sensor& sensor);
   void setReadInterval(uint32_t interval);
-  void setHysteresis(EiDs18b20Sensor& sensor);
+//  void setHysteresis(EiDs18b20Sensor& sensor);
   float getRawTemp(uint8_t sensorId);
   float getRawTempF(uint8_t sensorId);
   float getHysteresisTempC(uint8_t index);
   float getHysteresisTempF(uint8_t index);
+  uint8_t getSensorId(uint8_t appId);
 
 private:
 

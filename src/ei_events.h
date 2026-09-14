@@ -30,6 +30,7 @@ enum class EiEvent : uint16_t {
   // DS18B20
 
   Ds18b20SetupComplete,
+  Ds18b20TempChg,
 
   Count
 };
