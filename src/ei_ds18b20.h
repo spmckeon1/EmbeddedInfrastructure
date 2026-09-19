@@ -13,10 +13,11 @@
 
 #include <ei_logging.h>
 #include <ei_scheduler.h>
+#include <ei_types.h>
+#include <ei_utilities.h>
 
 static constexpr uint8_t INVALID_APP_ID = 0xFF;
 static constexpr uint8_t INVALID_SENSOR_INDEX = 0xFF;
-static constexpr int STARTUP_TEMP = INT_MIN;
 
 constexpr uint8_t RES_NINE   = 9;
 constexpr uint8_t RES_TEN    = 10;
@@ -89,8 +90,8 @@ public:
   bool addSensor(EiDs18b20Sensor& sensor);
   void setReadInterval(uint32_t interval);
 //  void setHysteresis(EiDs18b20Sensor& sensor);
-  float getRawTemp(uint8_t sensorId);
-  float getRawTempF(uint8_t sensorId);
+  float getTemp(uint8_t sensorId);
+  float getTempF(uint8_t sensorId);
   float getHysteresisTempC(uint8_t index);
   float getHysteresisTempF(uint8_t index);
   uint8_t getSensorId(uint8_t appId);
@@ -115,12 +116,8 @@ private:
   Sensor* findSensor(const DeviceAddress& address);
   bool matchDeviceAddr(const DeviceAddress& address0, const DeviceAddress& address1) const;
   String addrToStr(const DeviceAddress& address) const;
-  float applyHysteresisC(float newTemp,
-                                    float currentTemp,
-                                    float hysteresis);
-  float applyHysteresisF(float newTemp,
-                                    float currentTemp,
-                         float hysteresis);
+  float applyHysteresisC(float newTemp, float currentTemp, float hysteresis);
+  float applyHysteresisF(float newTemp, float currentTemp, float hysteresis);
 
 };
 

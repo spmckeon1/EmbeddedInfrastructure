@@ -17,13 +17,11 @@
 
 void AppInfo::getAppInfo(JsonDocument& doc, const char* filePath, const char* compileDate) {
   JsonObject app = doc["application"].to<JsonObject>();
-  String fileName = Text::stripPath(filePath);
-  GetAppName(app, fileName);
-  getAppVersion(app, fileName);
+  app["name"]     = appIDs.appName;
+  app["version"]  = appIDs.appVersion;
   app["author"]   = "Stephen McKeon";
   app["compiled"] = compileDate;
-  app["source"]   = filePath;
-}
+  app["source"]   = filePath;}
 
 /*-----  FILL IN THE APPLICATION NAE -----*/
 
@@ -97,6 +95,8 @@ String Json::jsonToString(const JsonDocument& doc) {
     return json;
 }
 
+/*-----  REPORT A MISSING JSON FIELD -----*/
+
 void Json::missingField(const char* eventType, const String& field, const String& json) {
     logError(LS, eventType, "Message missing required field '" + field + "'. Received: " + json);
 }
@@ -158,7 +158,7 @@ bool GPIO::readPin(uint8_t pin, bool lastState, uint8_t debounceTime) {
   return lastState;
 }
 
-/***************  NAMESPACE GPIO  ****************/
+/***************  NAMESPACE MATH  ****************/
 
 /*---------------  SUBTRACT 2 UNSIGNED NUMBERS  ---------------*/
 
@@ -166,4 +166,18 @@ unsigned long MATH::suli(unsigned long minuend, unsigned long subtrahend) {
   if (subtrahend > minuend)
     return 0;
   return minuend - subtrahend;
+}
+
+/***************  NAMESPACE TEMP  ****************/
+
+/*---------------  APPLY HYSTERSIS TO A TEMPERATURE READING  ---------------*/
+
+float TEMP::applyHysteresisF(float newTemp, float currentTemp, float hysteresis){
+    float nextUp = currentTemp + 1.0f;
+    float nextDown = currentTemp - 1.0f;
+    if (newTemp >= nextUp + hysteresis)
+        return nextUp;
+    if (newTemp <= nextDown - hysteresis)
+        return nextDown;
+    return currentTemp;
 }

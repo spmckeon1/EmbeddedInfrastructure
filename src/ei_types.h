@@ -10,6 +10,8 @@
 #include <Arduino.h>
 #include <stdint.h>
 
+static constexpr int STARTUP_TEMP = INT_MIN;
+
 //======================================================
 // Common Type Aliases
 //======================================================

@@ -14,7 +14,10 @@
 
 #ifdef SENSOR_USES_DS18B20
   #include <ei_ds18b20.h>
+#elif defined(SENSOR_USES_DHT)
+  #include <ei_dht.h>
 #endif
+#include <ei_ds18b20.h>
 
 #include <ei_logging.h>
 #include <ei_events.h>

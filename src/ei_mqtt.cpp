@@ -359,6 +359,7 @@ void EiMqtt::processInboundMsg(char* topic, const JsonDocument& doc) {
 bool EiMqtt::verifyRecMsg(const JsonDocument& doc, const String& json) {
   if (!doc["owner"].is<const char*>()) {
     Json::missingField(ET::MQTT, "owner", json);
+    DUMP(json);
     return false;
   }
   if (!doc["route"].is<const char*>()) {
@@ -488,6 +489,7 @@ bool EiMqtt::addSubscription(const String& name, const String& topic, uint8_t qo
       logError(LS, ET::MQTT, "Call addToSubCount() before addSubscription().");
       return false;
     }
+    _subscriptions = new (std::nothrow) MqttSubscription[_maxSubCnt];
     _subscriptions = new (std::nothrow) MqttSubscription[_maxSubCnt];
     if (_subscriptions == nullptr) {
       logError(LS, ET::MQTT, "Unable to allocate MQTT subscription table.");

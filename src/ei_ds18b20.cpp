@@ -254,7 +254,7 @@ bool EiDs18b20::readSensors() {
             else {
                 int previous = sensor.rptHysTempF;
 
-                sensor.rptHysTempF = applyHysteresisF(
+                sensor.rptHysTempF = TEMP::applyHysteresisF(
                     temperatureF,
                     sensor.rptHysTempF,
                     sensor.hysteresis
@@ -312,7 +312,7 @@ void EiDs18b20::setHysteresis(EiDs18b20Sensor& sensor) {
 
 /*----  GET A SENSORS RAW ºC TEMPERATURE  ----*/
 
-float EiDs18b20::getRawTemp(uint8_t sensorId)
+float EiDs18b20::getTemp(uint8_t sensorId)
 {
     if (sensorId >= _sensorCount)
         return NAN;
@@ -323,7 +323,7 @@ float EiDs18b20::getRawTemp(uint8_t sensorId)
 
 /*----  GET A SENSOR'S RAW ºF TEMPERATURE  ----*/
 
-float EiDs18b20::getRawTempF(uint8_t sensorId)
+float EiDs18b20::getTempF(uint8_t sensorId)
 {
     if (sensorId >= _sensorCount)
         return NAN;
@@ -349,7 +349,7 @@ float EiDs18b20::applyHysteresisC(float newTemp,
     return currentTemp;
 }
 
-/*----  CHECK TO SEE IF THE ºF VALUE HAS CHANGED ENOUGH TO ACTUALLY CHANGE WHAT IS REPORTED  ----*/
+/*----  CHECK TO SEE IF THE ºF VALUE HAS CHANGED ENOUGH TO ACTUALLY CHANGE WHAT IS REPORTED  ----*
 
 float EiDs18b20::applyHysteresisF(float newTemp,
                                   float currentTemp,

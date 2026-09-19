@@ -32,6 +32,7 @@ struct AppIDs {
   const char* pageHeader;
   const char* uploadPage;
   const char* mqttTopic;
+  const char* appVersion;
   String deviceId;
 };
 

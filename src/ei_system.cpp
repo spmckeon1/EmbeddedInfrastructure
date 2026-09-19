@@ -1,7 +1,13 @@
 
+#include "config.h"
+
 #include <Arduino.h>
 #include <ei_appFramework.h>
-#include <ei_ds18b20.h>
+#ifdef SENSOR_USES_DS18B20
+  #include <ei_ds18b20.h>
+#elif defined(SENSOR_USES_DHT)
+  #include <ei_dht.h>
+#endif
 #include <ei_events.h>
 #include <ei_storage.h>
 #include <ei_mqtt.h>
@@ -54,7 +60,11 @@ void EiSystem::evtLoop() {
       break;
     case 4:
       nextSubsystem = 5;
-      ds18b20.evtLoop();
+      #ifdef SENSOR_USES_DS18B20
+        ds18b20.evtLoop();
+      #elif defined(SENSOR_USES_DHT)
+        dht.evtLoop();
+      #endif
       break;
     case 5:
     default:
@@ -98,8 +108,11 @@ bool EiSystem::setup() {
   if(!eiTime.setup()) return false;
   if(!mqtt.setup()) return false;
   if(!web.setup()) return false;
+#ifdef SENSOR_USES_DS18B20
   if(!ds18b20.setup()) return false;
-
+#elif defined(SENSOR_USES_DHT)
+  if(!dht.setup()) return false;
+#endif
   mqtt.addSubscription("EI Global", EI_MQTT_TOPIC_SUBSCRIPTION, QOS2);      // MUST BE LAST ITEM IN SETUP()
   return true;
 }
@@ -108,7 +121,11 @@ bool EiSystem::startup() {
   if(!network.startup()) return false;      // Load credentials, initialize WiFi state
   if(!appFramework.startup()) return false;
   if(!mqtt.startup()) return false;
-  if(!ds18b20.startup()) return false;
+#ifdef SENSOR_USES_DS18B20
+    if (!ds18b20.startup()) return false;
+#elif defined(SENSOR_USES_DHT)
+    if (!dht.startup()) return false;
+#endif
   eiEvents.on(EiEvent::TimeActive, processTimeActive);
   return true;
 }

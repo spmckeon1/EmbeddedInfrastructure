@@ -49,3 +49,8 @@ namespace GPIO {
 namespace MATH {
 unsigned long suli(unsigned long minuend, unsigned long subtrahend);
 }
+
+namespace TEMP {
+float applyHysteresisF(float newTemp, float currentTemp, float hysteresis);
+}
+
