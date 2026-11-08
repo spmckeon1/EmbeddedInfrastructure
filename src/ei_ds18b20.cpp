@@ -5,6 +5,8 @@
 //  Created by Stephen McKeon on 8/11/26.
 //
 
+#include "config.h"
+
 #include <Arduino.h>
 #include <ArduinoTrace.h>
 
@@ -39,7 +41,7 @@ bool EiDs18b20::setup() {
   for (uint8_t i = 0; i < _config.expectedSensorCount; i++) {
       _sensorsInUse[i].index = i;
   }
-  _readSensor = {IntervalType::IT_SECOND, _config.readInterval, -1};
+_readSensor = {IntervalType::IT_SECOND, _config.readInterval, -1};
   eiEvents.notify(EiEvent::Ds18b20SetupComplete);
   return true;
 }
@@ -67,7 +69,7 @@ void EiDs18b20::evtLoop(){
   if (!_state.initialized) {
     return;
   }
-  if(scheduler.isTimeToRun(_readSensor)) {
+  if(scheduler.isTimeToRun(_readSensor,FN)) {
     readSensors();
   }
 }
@@ -115,12 +117,6 @@ bool EiDs18b20::discoverSensors()
                      "Unable to get OneWire sensor address.");
             continue;
         }
-
-//        _sensors->setResolution(
-//            address,
-//            _config.resolution,
-//            true
-//        );
 
       Sensor* sensor = findSensor(address);
 
@@ -391,3 +387,8 @@ uint8_t EiDs18b20::getSensorId(uint8_t appId) {
   return INVALID_SENSOR_INDEX;
 }
 
+/*----  GET THE SENSOR READ INTERVAL  ----*/
+
+uint32_t EiDs18b20::getReadIntv() {
+  return _config.readInterval;
+}

@@ -27,7 +27,7 @@ namespace AppInfo {
   void getAppInfo(JsonDocument& doc, const char* filePath, const char* compileDate);
   String formatAppInfo(const JsonDocument& doc);
   void getAppVersion(JsonObject app, const String& fileName);
-  String addRuntimeInfo(String banner);
+//  String addRuntimeInfo(String banner);
 }
 
 namespace Json {
@@ -47,10 +47,13 @@ namespace GPIO {
 }
 
 namespace MATH {
-unsigned long suli(unsigned long minuend, unsigned long subtrahend);
+  unsigned long suli(unsigned long minuend, unsigned long subtrahend);
 }
 
 namespace TEMP {
-float applyHysteresisF(float newTemp, float currentTemp, float hysteresis);
+  float applyHysteresisF(float newTemp, float currentTemp, float hysteresis);
 }
 
+namespace FILES {
+const char* getFileName(const char* filePath);
+}

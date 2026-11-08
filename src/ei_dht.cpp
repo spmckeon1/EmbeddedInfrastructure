@@ -11,6 +11,7 @@
 #include <ei_utilities.h>
 
 #include "ei_dht.h"
+#include "ei_logging.h"
 
 
 EiDht dht;
@@ -45,7 +46,7 @@ bool EiDht::evtLoop() {
   if (!_state.initialized) {
     return false;
   }
-  if (scheduler.isTimeToRun(_readSensor)) {
+  if (scheduler.isTimeToRun(_readSensor, FN)) {
     readSensor();
   }
   return true;
@@ -118,4 +119,10 @@ float EiDht::getHysteresisTemp() {
 
 float EiDht::getHysteresisTempF() {
   return getTempF();
+}
+
+/*--- GET THE SENSOR READ INTERVAL  ---*/
+
+uint32_t EiDht::getReadIntv() {
+  return _config.readInterval;
 }

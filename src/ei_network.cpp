@@ -69,7 +69,7 @@ bool EiNetwork::startup() {
 
 bool EiNetwork::evtLoop() {
   if (_config.dirty) {
-      writeConfigToDisk();
+    writeConfigToDisk();
   }
 
   if (_mode == NetworkMode::CONNECTING &&
@@ -255,10 +255,11 @@ void EiNetwork::aWiFiEvent(WiFiEvent_t event) {
 
 bool EiNetwork::readConfigFromDisk() {
   JsonDocument doc;
-  if (!storage.readJsonFile(_configFileName.c_str(), doc, LN))
+  if (!storage.readJsonFile(_configFileName.c_str(), doc, LN, false))
     return false;
   _config.ssid     = doc["ssid"].as<String>();
   _config.password = doc["password"].as<String>();
+  logInfo(LS, ET::NETWORK, "Configured Wi-Fi SSID: " + _config.ssid);
   return true;
 }
 
@@ -269,7 +270,6 @@ Storage::WriteResult EiNetwork::writeConfigToDisk()
     JsonDocument doc;
     doc["ssid"]     = _config.ssid;
     doc["password"] = _config.password;
-
     Storage::WriteResult result =
         storage.writeJsonFile(_configFileName.c_str(), doc, LN);
 
@@ -380,14 +380,13 @@ bool EiNetwork::configure(const NetworkConfig& cfg) {
         logInfo(LS, ET::NETWORK, "WiFi configuration update received but there were no changes.");
         return true;
     }
-
     _config = cfg;
     _config.dirty = true;
-
-    logInfo(LS, ET::NETWORK, "WiFi configuration updated. On reboot the SSID: " + _config.ssid + " will be used.");
+  logInfo(LS, ET::NETWORK, "WiFi configuration updated. On reboot the SSID: " + _config.ssid + " will be used.");
 
     return true;
 }
+
 /*-----  PUBLIC: ALLOW EXTERNAL AGENT TO SEND A NEW NETWORK WIFI JSON DOC IN  -----*/
 
 bool EiNetwork::configureFromJson(const JsonDocument& doc) {

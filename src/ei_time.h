@@ -76,6 +76,7 @@ public:
   const TimeConfig& config() const;
   bool configureFromJson(const JsonDocument& doc);
   void saveBootTime();
+  int16_t getOffset();
 
 private:
   String _configFileName;

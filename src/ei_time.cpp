@@ -4,6 +4,8 @@
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <ArduinoTrace.h>
+
 #include <ezTime.h>
 
 #include <ei_events.h>
@@ -25,12 +27,13 @@ bool EiTime::evtLoop() {
   
   if (_config.dirty) {
       writeConfigToDisk();
+    TRACE();
   }
 
   if (!network.isConnected())
     return false;
   if (timeStatus() != timeSet) {
-    if (scheduler.isTimeToRun(ntpSetTimer))
+    if (scheduler.isTimeToRun(ntpSetTimer, FN))
       syncTime();
     ntpSyncAnnounced = false;
     return false;
@@ -83,12 +86,11 @@ bool EiTime::setTimeZone() {
 /*-----  TAKE CARE OFF ALL THE ACTIONS NECESSAY TO ENSURE IETIME HAS WHAT IT NEEDS TO RUN  -----*/
 
 bool EiTime::setup() {
-  TRACE();
   JsonDocument doc;
   _configFileName = appDirs.libCfgDir + "/ei_timeCfg.json";
   doc = createConfigJson(_config);
   storage.ensureFileExists(_configFileName, createConfigJson(_config), LN);         // Create the configuration file with defaults if it doesn't exist.
-  if (!storage.readJsonFile(_configFileName.c_str(), doc, LN)) {                            // Read the configuration file.
+  if (!storage.readJsonFile(_configFileName.c_str(), doc, LN, true)) {                            // Read the configuration file.
     logError(LS, ET::TIME, "Failed to read: " + String(_configFileName));
     return false;
   }
@@ -113,7 +115,7 @@ bool EiTime::setup() {
 bool EiTime::readConfigFromDisk() {
     JsonDocument doc;
 
-    if (!storage.readJsonFile(_configFileName.c_str(), doc, LN))
+    if (!storage.readJsonFile(_configFileName.c_str(), doc, LN, true))
         return false;
 
     _config.posixRule = doc["posixRule"] | _config.posixRule;
@@ -126,16 +128,18 @@ bool EiTime::readConfigFromDisk() {
 
 Storage::WriteResult EiTime::writeConfigToDisk() {
     JsonDocument doc;
-
+  TRACE();
     doc["posixRule"] = _config.posixRule;
     doc["olsonName"] = _config.olsonName;
 
     Storage::WriteResult result = storage.writeJsonFile(_configFileName.c_str(), doc, LN);
+  TRACE();
 
     if (result == Storage::WriteResult::Success) {
         _config.dirty = false;
     }
 
+  TRACE();
     return result;
 }
 
@@ -234,7 +238,7 @@ void EiTime::saveBootTime() {
 
 time_t EiTime::getBootTime() const {
   JsonDocument doc;
-  if (!storage.readJsonFile(appFnames.bootTime.c_str(), doc, __LINE__)) {
+  if (!storage.readJsonFile(appFnames.bootTime.c_str(), doc, LN, true)) {
     logError(LS, ET::TIME, "Unable to read boot time.");
     return 0;
   }
@@ -265,7 +269,9 @@ bool EiTime::setPosixRule(const String& rule) {
         return false;
     _config.posixRule = rule;
     _config.dirty = true;
+  TRACE();
     writeConfigToDisk();
+  TRACE();
     return true;
 }
 
@@ -351,4 +357,10 @@ bool EiTime::configure(const TimeConfig& cfg) {
   logInfo(LS, ET::TIME, "Time configuration changed to " + _config.olsonName + ".");
 
   return true;
+}
+
+/*-----  GET THE TIME ZONES OFFSET IM MINUTES  -----*/
+
+int16_t EiTime::getOffset() {
+    return _tz.getOffset();
 }

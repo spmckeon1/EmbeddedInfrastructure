@@ -8,6 +8,8 @@
 // EmbeddedInfrastructure intentionally supports one active file upload.
 // Reject additional uploads until the current upload completes.
 
+// TO GET INTO ELEGANTOTA ENTER "DECEICE_IP/update"
+
 #define ELEGANTOTA_USE_ASYNC_WEBSERVER 1
 
 #include <ArduinoTrace.h>
@@ -67,9 +69,7 @@ bool Web::startup() {
     logError(LS, ET::WEB, "Maximum Web clients is zero.");
     return false;
   }
-  DUMP(appLibraryConfig.maxWebClients);
   _clients = new WebClient[_maxWebClients];
-  DUMP(_maxWebClients);
   return true;
 }
 
@@ -95,7 +95,6 @@ void Web::onWsEvent(AsyncWebSocket* server,
 {
   switch (type) {
     case WS_EVT_CONNECT: {
-      TRACE();
       uint32_t clientId = client->id();
 
       registerClient(client);
@@ -132,7 +131,6 @@ void Web::onWsEvent(AsyncWebSocket* server,
       break;
     }
     case WS_EVT_DISCONNECT: {
-      TRACE();
       WebClient* wc = findClient(client);
       if (wc != nullptr) {
         logInfo(LS, ET::WEB, "Web client disconnected. Client ID: " + String(wc->clientId));
@@ -243,44 +241,52 @@ bool Web::handleFileSizeRequest(String s, AsyncWebSocketClient* client) {
 
 bool Web::startWebServer() {
   _server.on("/", [this](AsyncWebServerRequest *request) {
-  const String mainHTMLFile = "/html/main.html";
-  if (storage.exists(mainHTMLFile)) {
-    logInfo(LS, ET::WEB, "Dispatching main HTML file '" + mainHTMLFile + "'");
-    request->send(storage.getFS(), mainHTMLFile, "text/html");
-  }
-  else {
-    logError(LS, ET::WEB, "Main HTML file '" + mainHTMLFile + "' does not exist");
-    request->send(404, "text/plain", "Main HTML file not found");
-  }
-
+    const String mainHTMLFile = "/html/main.html";
+    if (storage.exists(mainHTMLFile)) {
+      logInfo(LS, ET::WEB, "Dispatching main HTML file '" + mainHTMLFile + "'");
+      request->send(storage.getFS(), mainHTMLFile, "text/html");
+    }
+    else {
+      logError(LS, ET::WEB, "Main HTML file '" + mainHTMLFile + "' does not exist");
+      request->send(404, "text/plain", "Main HTML file not found");
+    }
   });
-  
+
   _server.on("/setup", AsyncWebRequestMethod::HTTP_GET,
       [this](AsyncWebServerRequest *request) {
           request->send_P(200, "text/html",webPgSetup);
       });
+
   _server.on("/post", AsyncWebRequestMethod::HTTP_POST,
       [](AsyncWebServerRequest *request) { },
-      [this](AsyncWebServerRequest *request,
-             const String& filename,
-             size_t index,
-             uint8_t *data,
-             size_t len,
-             bool final)
+      [this](AsyncWebServerRequest *request, const String& filename, size_t index, uint8_t *data, size_t len, bool final)
       {
           handlePostFile(request, filename, index, data, len, final);
       });
+
+  _server.on("/console", AsyncWebRequestMethod::HTTP_GET,
+      [this](AsyncWebServerRequest *request) {
+        const String consoleHTMLFile = "/html/console.html";
+        if (storage.exists(consoleHTMLFile)) {
+          logInfo(LS, ET::WEB, "Dispatching console HTML file '" + consoleHTMLFile + "'");
+          request->send(storage.getFS(), consoleHTMLFile, "text/html");
+        }
+        else {
+          logError(LS, ET::WEB, "Console HTML file '" + consoleHTMLFile + "' does not exist");
+          request->send(404, "text/plain", "Console HTML file not found");
+        }
+      });
+
   _server.onNotFound(
       [this](AsyncWebServerRequest *request)
       {
           if (tryServeStaticFile(request))
               return;
-
           request->send(404, "text/plain", "404 - File Not Found");
       });
-  
+
   logInfo(LS, ET::WEB, "Starting web server...");
-  _server.begin();                                                // Start accepting HTTP requests.
+  _server.begin();                                // Start accepting HTTP requests.
   logInfo(LS, ET::WEB, "Web server started.");
   return true;
 }
@@ -346,7 +352,7 @@ void Web::handlePostFile(AsyncWebServerRequest* request,
 
 
 /*---------------  IF THE WEB SERVER RECEIVES A REQUEST FOR A NON-DEFINED
-                   ROUTE THE SEE IF STORAGE HAS A FILE THAT MATCHES IT  ---------------*/
+                   ROUTE THENprocessConnect SEE IF STORAGE HAS A FILE THAT MATCHES IT  ---------------*/
 
 bool Web::tryServeStaticFile(AsyncWebServerRequest *request) {
   String path = request->url();
@@ -410,7 +416,6 @@ WebClient* Web::findClient(AsyncWebSocketClient* client) {
 /*-----  RETURN THE USED CLIENT STRUCT TO ITS ORIGINAL EMPTY STATE  -----*/
 
 void Web::clearClient(WebClient* wc) {
-  TRACE();
   if (wc == nullptr)
     return;
   wc->client        = nullptr;
@@ -437,10 +442,8 @@ bool Web::processMsg(const JsonDocument& doc) {
 /*-----  REGISTER A NEW WEB CLIENT  -----*/
 
 void Web::registerClient(AsyncWebSocketClient* client) {
-  DUMP(_maxWebClients);
   for (uint8_t i = 0; i < _maxWebClients; i++) {
     if (_clients[i].client == nullptr) {
-      DUMP(i);
       _clients[i].client = client;
       _clients[i].clientId = client->id();
       _clients[i].ip = client->remoteIP();

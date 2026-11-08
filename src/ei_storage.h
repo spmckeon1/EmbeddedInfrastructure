@@ -99,7 +99,7 @@ public:
   fs::FS& getFS();
   void getInfo(StorageInfo& info) const;
   WriteResult writeJsonFile(const char* path, const JsonDocument& doc, int from);
-  bool readJsonFile(const char* path, JsonDocument& doc, int from);
+  bool readJsonFile(const char* path, JsonDocument& doc, int from, bool logData);
   void processMsg(const JsonDocument& doc);
   void processBinary(const uint8_t* data, size_t len);
   bool beginUpload(const char* path);

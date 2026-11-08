@@ -296,7 +296,7 @@ String Storage::readFile(const char * path, bool logFile) {
  file.close();                                                                               // close the file
  
  if (logFile) {
-   logInfo(LS, ET::STORAGE, "Reading file: " + String(path) + + ", contents: " + s);              // log the file path and file contents
+   logInfo(LS, ET::STORAGE, "Reading file: " + String(path) + + ", contents: " + s);         // log the file path and file contents
  }
  return s;                                                                                   // return 's' to the calling function
 }
@@ -601,9 +601,9 @@ Storage::WriteResult Storage::writeJsonFile(const char* path, const JsonDocument
 
 /*-----  READ A JSON FILE FROM DISK  -----*/
 
-bool Storage::readJsonFile(const char* path, JsonDocument& doc, int from) {
-    String json = readFile(path, from);
-    auto err = deserializeJson(doc, json);
+bool Storage::readJsonFile(const char* path, JsonDocument& doc, int from, bool logData) {
+  String json = readFile(path, logData);
+  auto err = deserializeJson(doc, json);
   if (err) {
     logError(LS, ET::STORAGE, "Unable to parse JSON file: " + String(path) + "Error = " + String(err.c_str()));
     return false;

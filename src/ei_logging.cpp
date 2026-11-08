@@ -6,6 +6,7 @@
 #include <ei_storage.h>
 #include <ei_time.h>
 #include <ei_conversion.h>
+#include <ei_web.h>
 
 Logging logging;
 
@@ -21,11 +22,22 @@ bool Logging::evtLoop() {
 
 void Logging::startup() {
   Serial.begin(115200);                                                         // set the serial port speed
+  
   logInfo(LS, ET::LOGGING, dividerStr(FN, LN));
   logInfo(LS, ET::LOGGING, dividerStr(FN, LN));
   logInfo(LS, ET::LOGGING, "Starting boot process." );
   logInfo(LS, ET::LOGGING, "Serial started at 115200");
   logInfo(LS, ET::LOGGING, "Starting the Logging service");
+}
+
+/*-----  SETUP THE LOGGING SERVICE  -----*/
+   
+bool Logging::setup() {
+  _consoleFname = appDirs.htmlDir + "/console.html";
+  if(!storage.fileExists(_consoleFname)) {
+    logError(LS,ET::LOGGING, "The file '" + _consoleFname + "' does not exist.  Please upload it to the controller.");
+  }
+  return true;
 }
 
 /*-----  FORMAT LOG ENTRY FOR THE SERIAL MONITOR  -----*/
@@ -87,9 +99,9 @@ void Logging::msg(
 {
   file = baseFileName(file);
   Serial.println(formatSerialLogEntry(file,
-                                    function,
-                                    lineNum,
-                                    message));
+                                      function,
+                                      lineNum,
+                                      message));
   sendToNodeRedLogging(formatJsonStrLogEntry(file,
                                              function,
                                              lineNum,
@@ -103,18 +115,14 @@ void Logging::msg(
 
 bool Logging::sendToNodeRedLogging(const String& logEntry)
 {
-    switch (_dest)
-    {
-        case LogDestination::RamBuffer:
-          return enqueuePendingLog(logEntry);
-        case LogDestination::MqttServer:
-          return mqtt.mqttPubMsg(_config.topic,
-                                   _config.qos,
-                                   _config.retain,
-                                   logEntry,
-                                   LN);
+    switch (_dest) {
+      case LogDestination::WebConsole:
+        web.sendWS_msg(logEntry, nullptr);
+        enqueuePendingLog(logEntry);
+        return true;
+      case LogDestination::MqttServer:
+        return mqtt.mqttPubMsg(_config.topic, _config.qos, _config.retain, logEntry, LN);
     }
-
     return false;
 }
 
@@ -180,7 +188,7 @@ const char* Logging::destinationToString(LogDestination dest) const
 {
     switch (dest)
     {
-        case LogDestination::RamBuffer: return "RamBuffer";
+        case LogDestination::WebConsole: return "WebConsole";
         case LogDestination::MqttServer: return "MqttServer";
         default:                        return "Unknown";
     }
@@ -215,6 +223,32 @@ bool Logging::pendingLogsFull() const {
 /*-----  ADD THE NEW LOG AT THE TAIL OF THE QUEUE  -----*/
 
 bool Logging::enqueuePendingLog(const String& jsonLog) {
+    if (_queueCount >= MAX_PENDING_LOGS) {                      // Preserve the first 100 regular log entries.
+        if (!_overflowLogged) {                                 // The queue is full. Record the overflow only once.
+            _overflowLogged = true;
+          const String overflowMsg = formatJsonStrLogEntry(
+              LS,
+              T::EVENT,
+              L::ERROR,
+              ET::LOGGING,
+              "RAM OVERFLOW - LOGGING ABORTED"
+          );
+          _pendingLogQueue[_queueTail] = overflowMsg;
+            _queueTail = (_queueTail + 1) % (MAX_PENDING_LOGS + 1);
+            _queueCount++;
+        }
+        return false;
+    }
+    _pendingLogQueue[_queueTail] = jsonLog;
+    _queueTail = (_queueTail + 1) % (MAX_PENDING_LOGS + 1);
+    _queueCount++;
+
+    return true;
+}
+
+/*-----  ADD THE NEW LOG AT THE TAIL OF THE QUEUE  -----*
+
+bool Logging::enqueuePendingLog(const String& jsonLog) {
   if (pendingLogsFull())
     return false;
   _pendingLogQueue[_queueTail] = jsonLog;
@@ -229,10 +263,12 @@ bool Logging::dequeuePendingLog(String& jsonLog) {
 //  TRACE();
   if (pendingLogsEmpty())
     return false;
-  jsonLog = _pendingLogQueue[_queueHead];             // Transfer ownership of the oldest pending log
-  _pendingLogQueue[_queueHead].clear();               // Release the queue's copy
-  _queueHead = (_queueHead + 1) % MAX_PENDING_LOGS;   // Advance to the next entry
-  _queueCount--;                                      // One less entry remains
+  jsonLog = _pendingLogQueue[_queueHead];                   // Transfer ownership of the oldest pending log
+  _pendingLogQueue[_queueHead].clear();                     // Release the queue's copy
+  _queueHead = (_queueHead + 1) % (MAX_PENDING_LOGS + 1);   // Advance to the next entry
+  _queueCount--;                                            // One less entry remains
+  if (_queueCount < MAX_PENDING_LOGS)
+      _overflowLogged = false;
   return true;
 }
 

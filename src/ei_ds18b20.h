@@ -95,6 +95,7 @@ public:
   float getHysteresisTempC(uint8_t index);
   float getHysteresisTempF(uint8_t index);
   uint8_t getSensorId(uint8_t appId);
+  uint32_t getReadIntv();
 
 private:
 

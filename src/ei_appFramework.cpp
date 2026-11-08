@@ -29,6 +29,7 @@ AppLibraryConfig appLibraryConfig;
 
 bool AppFramework::startup() {
   if(!getDeviceId()) return false;
+  eiEvents.on(EiEvent::SystemReady, onSystemReady);
   return true;
 }
 
@@ -36,7 +37,7 @@ bool AppFramework::startup() {
 
 bool AppFramework::getDeviceId() {
     JsonDocument doc;
-  if (storage.readJsonFile(appFnames.deviceId.c_str(), doc, __LINE__)) {                            // Try to retrieve an existing device ID.
+  if (storage.readJsonFile(appFnames.deviceId.c_str(), doc, LN, true)) {                            // Try to retrieve an existing device ID.
     const char* id = doc["deviceId"];
     if (id && strlen(id) > 0) {
       appIDs.deviceId = String(id);
@@ -131,7 +132,6 @@ void AppFramework::initSetupPage(const JsonDocument& doc) {
   Serial.println();
 
   eiSystem.routeOutboundMsg(response);
-  TRACE();
 }
 
 /*-----    WRAP MQTT MSG WITH THE REQUIRED FORMTTING   -----*/
@@ -150,5 +150,22 @@ String AppFramework::buildJsonAppMqttMsg(const String& route, const String& comm
   serializeJson(doc, json);
 
   return json;
+}
+
+/*-----  ON SYSTEM READY -----*/
+
+void onSystemReady() {
+  appFramework.writeBootBanner();
+  pinMode(appIDs.runningLedPin, OUTPUT);
+  digitalWrite(appIDs.runningLedPin, HIGH);
+}
+
+/*-----  WRITE THE BOOT BANNER -----*/
+
+void AppFramework::writeBootBanner() {
+  JsonDocument doc;
+  eiSystem.getFreeHeap();                                               // do the initial check heap
+  AppInfo::getAppInfo(doc, appIDs.sourceFile, appIDs.compileDate);
+  logInfo(LS, "APP", "\n\n" + AppInfo::formatAppInfo(doc) + "\n\n");
 }
 

@@ -57,6 +57,7 @@ void logError(const char* file,
 
 namespace T {           // Type
   enum Type {
+    LOGGING,        // Logging system
     SYSLOG,         // Diagnostic text
     TEMPERATURE,    // Temperature measurement
     METRIC,         // Numeric measurement
@@ -67,6 +68,7 @@ namespace T {           // Type
   };
 
   inline constexpr const char* typeNames[] = {
+    "LOGGING",
     "SYSLOG",
     "TEMPERATURE",
     "METRIC",
@@ -130,7 +132,7 @@ struct LoggingConfig {
 };
 
 enum class LogDestination {
-  RamBuffer,
+  WebConsole,
   MqttServer
 };
 
@@ -138,10 +140,12 @@ class Logging {
 private:
 
   LoggingConfig _config;
-  LogDestination _dest = LogDestination::RamBuffer;
+  LogDestination _dest = LogDestination::WebConsole;
+  String  _consoleFname = "";
+  bool _overflowLogged = false;
   
   static constexpr size_t MAX_PENDING_LOGS = 100;
-  String _pendingLogQueue[MAX_PENDING_LOGS];
+  String _pendingLogQueue[MAX_PENDING_LOGS + 1];
   uint16_t _queueHead = 0;
   uint16_t _queueTail = 0;
   uint16_t _queueCount = 0;
@@ -182,6 +186,7 @@ public:
            const String& message
            );
   String dividerStr(const String& function, int line);
+  bool setup();
   void startup();
   void setDestination(LogDestination destination);
   const char* destinationToString(LogDestination dest) const;

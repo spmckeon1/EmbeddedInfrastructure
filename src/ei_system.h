@@ -1,12 +1,21 @@
 #pragma once
 
+#include "config.h"
+
 #include <ei_types.h>
+#include <ei_scheduler.h>
 #include <ei_utilities.h>
 
 // EI MQTT message topics
 #define EI_MQTT_TOPIC_SUBSCRIPTION   "nr/to/ei/#"
 #define EI_MQTT_INBOUND_GLOBAL    "nr/to/ei"
 #define EI_MQTT_OUTBOUND_GLOBAL "ei/to/nr"
+
+#ifdef BUILD_TEST
+  #define INITIAL_HEAP_INTERVAL 5
+#elif defined(BUILD_PRODUCTION)
+  #define INITIAL_HEAP_INTERVAL 60
+#endif
 
 struct SystemState {
   bool rebootPending = false;
@@ -18,7 +27,8 @@ struct SystemState {
 
 struct SystemConfig {
   bool heapMonitorEnabled = true;
-  uint16_t heapMonitorInterval = 60;    // Minutes
+  RunTime heapTimer;
+  uint16_t heapMonitorInterval = INITIAL_HEAP_INTERVAL;  // Minutes
 };
 
 class EiSystem {
@@ -33,6 +43,8 @@ public:
   void getFreeHeap();
   void enableHeapMonitor(bool enabled);
   void setHeapMonitorInterval(uint16_t minutes);
+  uint16_t getHeapMonitorInterval() const;
+  bool getHeapMonitorEnabled() const;
   void processExternalMsg(const JsonDocument& doc);             // msgs comming in libraries that receive outside commuications
 //  void processMsg(const JsonDocument& doc);
 
@@ -53,6 +65,7 @@ private:
   SystemState _state;
   SystemConfig _config;
   String _rebootReasonFname;
+  String _configFileName;
   
   void doGetGlobalCfg();
   void hdlRebootReq(const JsonDocument& doc);
@@ -61,6 +74,8 @@ private:
   static Service serviceFromString(const char* s);
   static const char* serviceToString(Service service);
   void checkHeap();
+  bool loadConfig();
+  bool saveConfig();
 
 };
 

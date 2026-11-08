@@ -11,9 +11,28 @@
 #include <ei_network.h>
 #include <ei_time.h>
 
+
+
 /***************  NAMESPACE APPINFO  ****************/
 
 /*-----  ASSEMBLE THE DESIRED INFORMATION  -----*/
+
+void AppInfo::getAppInfo(
+  JsonDocument& doc,
+  const char* filePath,
+  const char* compileDate) {
+  JsonObject app = doc["application"].to<JsonObject>();
+  app["name"]     = appIDs.appName;
+  app["version"]  = appIDs.appVersion;
+  app["author"]   = "Stephen McKeon";
+  app["compiled"] = compileDate;
+  app["source"]   = filePath;
+  unsigned long elapsedMs = static_cast<unsigned long>(eiTime.now() - eiTime.getBootTime()) * 1000UL;
+  app["uptime"] = eiTime.formatDuration(elapsedMs, DurFormat::VERBOSE);
+  app["ipAddress"] = network.getIPAddress();
+}
+
+/*-----  ASSEMBLE THE DESIRED INFORMATION  -----*
 
 void AppInfo::getAppInfo(JsonDocument& doc, const char* filePath, const char* compileDate) {
   JsonObject app = doc["application"].to<JsonObject>();
@@ -21,7 +40,8 @@ void AppInfo::getAppInfo(JsonDocument& doc, const char* filePath, const char* co
   app["version"]  = appIDs.appVersion;
   app["author"]   = "Stephen McKeon";
   app["compiled"] = compileDate;
-  app["source"]   = filePath;}
+  app["source"]   = filePath;
+}
 
 /*-----  FILL IN THE APPLICATION NAE -----*/
 
@@ -52,7 +72,35 @@ void AppInfo::getAppVersion(JsonObject app, const String& fileName) {
   app["version"] = fileName.substring(start + 2, end);
 }
 
-  /*-----  PUT THE DOC DATA INTO THE STANDARD FORMAT AND RETURN THE DATA IN STRING -----*/
+/*-----  PUT THE DOC DATA INTO THE STANDARD FORMAT AND RETURN THE DATA IN STRING -----*/
+
+String AppInfo::formatAppInfo(const JsonDocument& doc) {
+    JsonObjectConst app = doc["application"];
+    String result;
+
+    if (!app["name"].isNull() && !app["version"].isNull())
+        result += app["name"].as<String>() +
+                  " Version: " + app["version"].as<String>();
+
+    if (!app["author"].isNull())
+        result += "\nby " + app["author"].as<String>();
+
+    if (!app["compiled"].isNull())
+        result += "\nCompiled: " + app["compiled"].as<String>();
+
+    if (!app["source"].isNull())
+        result += "\n" + app["source"].as<String>();
+
+    if (!app["uptime"].isNull())
+        result += "\nUptime: " + app["uptime"].as<String>();
+
+    if (!app["ipAddress"].isNull())
+        result += "\nIP address: " + app["ipAddress"].as<String>();
+
+    return result;
+}
+
+ /*-----  PUT THE DOC DATA INTO THE STANDARD FORMAT AND RETURN THE DATA IN STRING -----*
 
 String AppInfo::formatAppInfo(const JsonDocument& doc) {
   JsonObjectConst app = doc["application"];
@@ -68,7 +116,7 @@ String AppInfo::formatAppInfo(const JsonDocument& doc) {
   return result;
 }
 
-/*-----  GET RUN TIME AND IP ADDRESS INFO -----*/
+/*-----  GET RUN TIME AND IP ADDRESS INFO -----*
 
 String AppInfo::addRuntimeInfo(String banner) {
   time_t bootTime = eiTime.getBootTime();
@@ -180,4 +228,14 @@ float TEMP::applyHysteresisF(float newTemp, float currentTemp, float hysteresis)
     if (newTemp <= nextDown - hysteresis)
         return nextDown;
     return currentTemp;
+}
+
+/***************  NAMESPACE FILES  ****************/
+
+/*---------------  CHANGE A FQN TO FILE NAME ONLY  ---------------*/
+
+const char* FILES::getFileName(const char* filePath) {
+  const char* slash = strrchr(filePath, '/');
+
+  return slash ? slash + 1 : filePath;
 }

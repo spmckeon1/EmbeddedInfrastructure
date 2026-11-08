@@ -33,6 +33,9 @@ struct AppIDs {
   const char* uploadPage;
   const char* mqttTopic;
   const char* appVersion;
+  const char* sourceFile;
+  const char* compileDate;
+  int runningLedPin;
   String deviceId;
 };
 
@@ -69,6 +72,7 @@ public:
 
   void processMsg(const JsonDocument& doc);
   String buildJsonAppMqttMsg(const String& route, const String& command, const JsonObjectConst& data);
+  void writeBootBanner();
   
 private:
   bool getDeviceId();
@@ -85,3 +89,4 @@ extern AppIDs appIDs;
 extern MqttLwtPolicy appMqttLwtPolicy;
 extern MqttHeartbeatPolicy mqttHbPolicy;
 extern AppLibraryConfig appLibraryConfig;
+extern void onSystemReady();

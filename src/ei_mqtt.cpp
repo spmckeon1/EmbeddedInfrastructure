@@ -20,6 +20,8 @@ const String EiMqtt::HEARTBEAT_TOPIC{"ei/to/nr/hb"};
 /*-----  MQTT EVENT LOOP  -----*/
 
 bool EiMqtt::evtLoop() {
+  static RunTime loopTimer = {IntervalType::IT_SECOND, 15, -1};
+
   if (_config.dirty) {
       writeConfigToDisk();
   }
@@ -27,8 +29,7 @@ bool EiMqtt::evtLoop() {
   if (!_state.operational)                                      // if mqtt is not operational do nothing
       return false;
   
-  RunTime loopTimer = {IntervalType::IT_SECOND, 5, -1};
-  if(!_state.connected && scheduler.isTimeToRun(loopTimer)) {
+  if(!_state.connected && scheduler.isTimeToRun(loopTimer, FN)) {
     logInfo(LS, ET::MQTT, "Attempting MQTT cnnection.");
     connect();
 
@@ -219,7 +220,7 @@ void EiMqtt::sendHeartbeat() {
   if (!mqttHbPolicy.enabled)                                        // if heartbeats are not desired
     return;                                                         // just return
   static uint32_t lastHeartbeat = 0;
-  if(!scheduler.isTimeToRun(hbTimer)) return;                       // if it is not time to send a heartbeat then just return
+  if(!scheduler.isTimeToRun(hbTimer, FN)) return;                       // if it is not time to send a heartbeat then just return
   mqttPubMsg(HEARTBEAT_TOPIC, QOS0, FORGET, _heartbeatPayload, LN); // send a heartbeat to node red
 }
 
@@ -227,7 +228,6 @@ void EiMqtt::sendHeartbeat() {
 
 void EiMqtt::registerWithNodeRed() {
   const String topic = String("register/to/nr/") + appIDs.sourceId;
-  DUMP(appIDs.deviceId);
   JsonDocument doc;
   doc["appName"]            = appIDs.appName;
   doc["sourceId"]           = appIDs.sourceId;
@@ -268,10 +268,12 @@ bool EiMqtt::jsonToConfig(const JsonDocument& doc)
 
 bool EiMqtt::readCfgFromDisk() {
   JsonDocument doc;
-  if (!storage.readJsonFile(_configFileName.c_str(), doc, LN)) {
+  if (!storage.readJsonFile(_configFileName.c_str(), doc, LN, false)) {
     logError(LS, ET::MQTT, "Unable to read MQTT configuration.");
     return false;
   }
+  logInfo(LS, ET::MQTT, "MQTT configuration: " + String("host=") + doc["host"].as<String>() + ", port=" +
+          String(doc["port"].as<uint16_t>()) + ", brokerUser=" + doc["brokerUser"].as<String>());
   return jsonToConfig(doc);
 }
 
@@ -323,10 +325,8 @@ void EiMqtt::onMqttConnect(bool sessionPresent) {
 void EiMqtt::onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
   _state.connected = false;
   eiEvents.notify(EiEvent::MqttDisconnected);
-  logging.setDestination(LogDestination::RamBuffer);
-  logInfo(LS, ET::MQTT,
-          "MQTT disconnected. Reason: " +
-          disconnectReasonToString(reason));
+  logging.setDestination(LogDestination::WebConsole);
+  logInfo(LS, ET::MQTT, "MQTT disconnected. Reason: " + disconnectReasonToString(reason));
 }
 
 /*---------------  ON MQTT SUBSCRIBE  ---------------*/
@@ -359,7 +359,6 @@ void EiMqtt::processInboundMsg(char* topic, const JsonDocument& doc) {
 bool EiMqtt::verifyRecMsg(const JsonDocument& doc, const String& json) {
   if (!doc["owner"].is<const char*>()) {
     Json::missingField(ET::MQTT, "owner", json);
-    DUMP(json);
     return false;
   }
   if (!doc["route"].is<const char*>()) {

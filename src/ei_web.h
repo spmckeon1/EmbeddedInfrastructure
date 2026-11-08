@@ -44,6 +44,7 @@ public:
                         size_t len);
   bool processMsg(const JsonDocument& doc);
   bool isPageConnected(const String& page);
+//  bool sendToConsole(const String& message);
 
 private:
   

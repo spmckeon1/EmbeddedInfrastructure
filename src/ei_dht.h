@@ -46,6 +46,7 @@ public:
   float getTemp();
   float getTempF();
   float getHumidity();
+  uint32_t getReadIntv();
 
 
 private:

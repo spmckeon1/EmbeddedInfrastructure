@@ -18,7 +18,7 @@ struct RunTime
 class Scheduler
 {
 public:
-  bool isTimeToRun(RunTime& rt);
+  bool isTimeToRun(RunTime& rt, const char* source);
 
 private:
   int32_t getCurrentTick(const RunTime& rt);
